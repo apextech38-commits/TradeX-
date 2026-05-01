@@ -58,7 +58,7 @@ function AppContent() {
 
 function App() {
   return (
-    <ThemeProvider defaultTheme="dark" storageKey="tradex-theme">
+    <ThemeProvider defaultTheme="light" storageKey="tradex-theme-v3">
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
           <AppContent />
