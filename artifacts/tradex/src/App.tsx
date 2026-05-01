@@ -7,6 +7,7 @@ import { ThemeProvider } from "@/components/ThemeProvider";
 import LoadingScreen from "@/components/LoadingScreen";
 import Navbar, { TABS } from "@/components/Navbar";
 import BottomBar from "@/components/BottomBar";
+import AIScanner from "@/components/AIScanner";
 
 import Dashboard from "@/pages/Dashboard";
 import BotBuilder from "@/pages/BotBuilder";
@@ -52,6 +53,7 @@ function AppContent() {
       </main>
 
       <BottomBar />
+      <AIScanner />
     </div>
   );
 }
