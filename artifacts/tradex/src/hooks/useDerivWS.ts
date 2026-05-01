@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 
-const DERIV_APP_ID = 1089;
+const DERIV_APP_ID = "339nn77Xa7qUHK0CbknRG";
 const WS_URL = `wss://ws.binaryws.com/websockets/v3?app_id=${DERIV_APP_ID}`;
 
 export interface Tick {

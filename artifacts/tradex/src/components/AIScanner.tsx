@@ -111,7 +111,7 @@ export default function AIScanner() {
 
     closeWs();
 
-    const ws = new WebSocket("wss://ws.binaryws.com/websockets/v3?app_id=1089");
+    const ws = new WebSocket("wss://ws.binaryws.com/websockets/v3?app_id=339nn77Xa7qUHK0CbknRG");
     wsRef.current = ws;
 
     const count = Math.min(parseInt(ticks) || 500, 2000);
