@@ -1,15 +1,51 @@
 import { useState } from "react";
-import { Play, ChevronUp, ChevronDown } from "lucide-react";
+import { Play, ChevronUp, ChevronDown, X } from "lucide-react";
 
 export default function BottomBar() {
   const [expanded, setExpanded] = useState(false);
   const [activeTab, setActiveTab] = useState("Summary");
+  const [showDisclaimer, setShowDisclaimer] = useState(false);
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-40">
+    <>
+      {/* Risk Disclaimer Modal */}
+      {showDisclaimer && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4"
+          onClick={(e) => { if (e.target === e.currentTarget) setShowDisclaimer(false); }}
+        >
+          <div className="bg-card border border-border rounded-xl shadow-2xl w-full max-w-sm p-6 relative">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-foreground">Risk Disclaimer</h2>
+              <button
+                onClick={() => setShowDisclaimer(false)}
+                className="p-1 text-muted-foreground hover:text-foreground hover:bg-secondary rounded transition-colors"
+                aria-label="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-sm text-foreground leading-relaxed mb-6">
+              <span className="font-bold">Important Risk Warning</span>
+              {" "}Deriv offers complex derivatives, such as options and contracts for difference ("CFDs"). These products may not be suitable for all clients, and trading them puts you at risk. Please make sure that you understand the following risks before trading Deriv products:{" "}
+              a) you may lose some or all of the money you invest in the trade;{" "}
+              b) if your trade involves currency conversion, exchange rates will affect your profit and loss. You should never trade with borrowed money or with money that you cannot afford to lose.
+            </p>
+
+            <button
+              onClick={() => setShowDisclaimer(false)}
+              className="w-full py-2.5 bg-[#FACC15] hover:bg-[#eab308] text-black font-bold rounded-lg transition-colors text-sm"
+            >
+              I Understand
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Expanded Panel */}
       {expanded && (
-        <div className="bg-background border-t border-border shadow-[0_-10px_40px_rgba(0,0,0,0.15)]">
+        <div className="fixed bottom-[52px] left-0 right-0 z-40 bg-background border-t border-border shadow-[0_-10px_40px_rgba(0,0,0,0.10)]">
           <div className="flex items-center gap-6 px-6 border-b border-border bg-card">
             {["Summary", "Transactions", "Journal"].map(tab => (
               <button
@@ -18,7 +54,7 @@ export default function BottomBar() {
                 onClick={() => setActiveTab(tab)}
                 className={`py-3 text-sm font-medium border-b-2 transition-colors ${
                   activeTab === tab
-                    ? "border-[#3B82F6] text-[#3B82F6]"
+                    ? "border-primary text-primary"
                     : "border-transparent text-muted-foreground hover:text-foreground"
                 }`}
               >
@@ -28,7 +64,7 @@ export default function BottomBar() {
             <div className="flex-1" />
             <button
               data-testid="button-reset"
-              className="text-xs text-muted-foreground hover:text-foreground border border-border px-3 py-1 rounded hover:bg-border transition-colors"
+              className="text-xs text-muted-foreground hover:text-foreground border border-border px-3 py-1 rounded hover:bg-secondary transition-colors"
             >
               Reset
             </button>
@@ -44,8 +80,8 @@ export default function BottomBar() {
                   { label: "Contracts Lost", val: "0" },
                   { label: "Contracts Won", val: "0" },
                   { label: "Total Profit/Loss", val: "0.00", highlight: true },
-                ].map((stat, i) => (
-                  <div key={i} data-testid={`stat-${stat.label.toLowerCase().replace(/[\s./]/g, "-")}`} className="bg-card border border-border rounded-lg p-4">
+                ].map((stat) => (
+                  <div key={stat.label} className="bg-card border border-border rounded-lg p-4 shadow-sm">
                     <div className="text-xs text-muted-foreground mb-1">{stat.label}</div>
                     <div className={`text-lg font-bold ${stat.highlight ? "text-[#22C55E]" : "text-foreground"}`}>
                       {stat.val}
@@ -64,10 +100,11 @@ export default function BottomBar() {
       )}
 
       {/* Main Bar */}
-      <div className="h-[52px] bg-card border-t border-border flex items-center px-4 gap-4">
+      <div className="h-[52px] bg-card border-t border-border fixed bottom-0 left-0 right-0 z-40 flex items-center px-4 gap-4 shadow-sm">
         <button
           data-testid="button-risk-disclaimer"
-          className="text-[#FACC15] border border-[#FACC15] px-3 py-1.5 rounded text-xs font-medium hover:bg-[#FACC15]/10 transition-colors whitespace-nowrap shrink-0"
+          onClick={() => setShowDisclaimer(true)}
+          className="text-[#FACC15] border border-[#FACC15] px-3 py-1.5 rounded text-xs font-semibold hover:bg-[#FACC15]/10 transition-colors whitespace-nowrap shrink-0"
         >
           Risk Disclaimer
         </button>
@@ -86,19 +123,19 @@ export default function BottomBar() {
 
         <div className="flex-1 px-4 hidden md:flex items-center h-full">
           <div className="w-full h-0.5 bg-border rounded-full overflow-hidden">
-            <div className="h-full bg-[#3B82F6] w-0" />
+            <div className="h-full bg-primary w-0" />
           </div>
         </div>
 
         <button
           data-testid="button-expand-panel"
           onClick={() => setExpanded(!expanded)}
-          className="p-2 text-muted-foreground hover:text-foreground hover:bg-border rounded transition-colors shrink-0 md:ml-auto"
+          className="p-2 text-muted-foreground hover:text-foreground hover:bg-secondary rounded transition-colors shrink-0 md:ml-auto"
           aria-label={expanded ? "Collapse panel" : "Expand panel"}
         >
           {expanded ? <ChevronDown className="w-5 h-5" /> : <ChevronUp className="w-5 h-5" />}
         </button>
       </div>
-    </div>
+    </>
   );
 }
