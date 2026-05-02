@@ -1,0 +1,50 @@
+
+
+"Completely rebuild the Bot Builder page to match the real TraderKit bot builder exactly. Do NOT change any colors or styling:
+Left sidebar — Blocks Menu:
+Add a collapsible 'Blocks menu' panel with a search bar and these expandable sections: Analysis Logics 🔥, Trade parameters, Purchase conditions, Sell conditions (optional), Restart trading conditions, Analysis (with dropdown arrow). Each section when clicked should add that block to the canvas.
+Top toolbar — add these icons in order:
+Folder (open file), List (blocks view), Line chart, Down-trend chart, Undo, Redo, Zoom In, Zoom Out. All functional.
+Main canvas area — drag and drop workspace:
+Use the React DnD library or interact.js to make the canvas a drag and drop workspace. Each block (Trade parameters, Purchase conditions, Sell conditions, Restart trading conditions) should be a draggable card that can be freely moved and repositioned anywhere on the canvas by clicking and dragging. Blocks should have a grab cursor on hover.
+Trade Parameters block (dark blue):
+
+Header: '1. Trade parameters' with collapse arrow
+Market: three chained dropdowns — Derived > Continuous Indices > Volatility 100 Index
+Trade Type: two chained dropdowns — Digits > Even/Odd
+Contract Type: single dropdown — Even/Both/Odd
+Default Candle Interval: dropdown — 1 minute
+Toggle: 'Restart buy/sell on error (disable for better performance)'
+Checkbox: 'Restart last trade on error (bot ignores the unsuccessful trade)' — checked by default
+'Run once at start' dark blue sub-block containing:
+
+set stake ▼ to [1]
+set stake w ▼ to [1]
+set stop loss ▼ to [2000]
+set take profit ▼ to [2]
+set Duration ticks ▼ to [1]
+set Product Martingale after loss ▼ to [1]
+
+
+Trade options row: Duration [1] Ticks ▼ Stake [1.00] (min 0.5 max 69000)
+
+Purchase conditions block — collapsible dark blue block, label '2. Purchase conditions', positioned separately on canvas, draggable.
+Sell conditions block — collapsible, label '3. Sell conditions ▼', draggable, positioned top right of canvas.
+Restart trading conditions block — collapsible, label '4. Restart trading conditions ▼', draggable, positioned below Sell conditions.
+Right panel:
+
+Collapsible with >> arrow button
+Summary / Transactions / Journal tabs
+Summary shows: 'When you're ready to trade, hit Run. You'll be able to track your bot's performance here.'
+Below that: Total stake (0.00), Total payout (0.00), No. of runs (0), Contracts lost (0), Contracts won (0), Total profit/loss (0.00)
+'What's this?' link top right
+Reset button at bottom
+
+Quick Strategy button — top left, dark blue, opens strategy picker modal.
+Bottom bar:
+
+Risk Disclaimer button (yellow)
+Run button (green with play icon) — when clicked executes the bot strategy via Deriv WebSocket API using app_id=339IyLjCcUmBEXEzG6tsS
+'Bot is not running' status text
+Progress bar
+Live timestamp showing current date and time"
