@@ -3,12 +3,9 @@ import {
   useRef, useCallback, ReactNode
 } from "react";
 
-// App ID for public WebSocket tick streaming (no auth required)
-export const DERIV_APP_ID = "1089";
-
-// App ID registered with redirect URI → https://dev-utility-hub--apexricky20.replit.app/callback
-// This must be the user's own registered Deriv app (numeric ID from https://app.deriv.com/account/api-token)
-export const OAUTH_APP_ID = "339";
+// Registered Deriv App ID — used for both WebSocket streaming and OAuth login
+export const DERIV_APP_ID = "129077";
+export const OAUTH_APP_ID = "129077";
 
 const WS_URL   = `wss://ws.binaryws.com/websockets/v3?app_id=${DERIV_APP_ID}`;
 const OAUTH_URL = `https://oauth.deriv.com/oauth2/authorize?app_id=${OAUTH_APP_ID}&l=EN&brand=deriv`;
