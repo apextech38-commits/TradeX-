@@ -1,0 +1,52 @@
+Completely rebuild the Manual Traders page to match the real TraderKit manual trader exactly. Do NOT change any colors or styling:
+Layout: Two column layout — left side is a large live chart (80% width), right side is a trade panel (20% width).
+LEFT — Market selector card (top left of chart):
+
+Badge showing '100' with red dot indicator
+Market name: 'Volatility 100 (1s) Index' (bold)
+Live price with change amount and percentage (e.g. 1427.11 - 0.38 (0.03%)) with green up arrow
+Dropdown arrow ▼ to change market
+Clicking dropdown shows list of all Volatility indices to switch between
+
+LEFT — Chart toolbar (vertical, left side of chart):
+
+1T timeframe button
+Line chart icon
+Candlestick chart icon
+OHLC chart icon
+Pencil/draw tool icon
+Download icon
+Each button switches the chart type when clicked.
+
+LEFT — Live chart:
+
+Full real-time line chart pulling tick data from Deriv WebSocket: {"ticks_history": "R_100_1S", "count": 100, "end": "latest", "start": 1, "style": "ticks", "subscribe": 1} using app_id=339IyLjCcUmBEXEzG6tsS
+X axis shows timestamps, Y axis shows price levels
+Current price highlighted with a label box
+Blue dotted accumulator band showing +/- growth rate range around current price (updates with growth rate selection)
+Show +0.542 and -0.542 labels on the bands
+
+LEFT — Bottom stats bar:
+
+'Stats' label with ℹ️ icon
+Digit history sequence showing last 10 digits as numbers
+Up arrow ↑ at the end
+
+RIGHT — Trade panel:
+
+'Learn about this trade type' link at top
+Back arrow < and chart icon with trade type name 'Accumulators'
+Growth rate selector with 5 options: 1%, 2%, 3%, 4%, 5% — clicking selects it (dark background). Default 3% selected.
+Stake row: minus button, stake amount input (default 10), plus button, currency selector showing AUD with < arrow
+Take profit checkbox with label 'Take profit' and ℹ️ icon — unchecked by default
+Max. payout label with value
+Max. ticks label with value
+All values should update dynamically based on growth rate and stake amount selected
+
+Bottom bar (persistent):
+
+Risk Disclaimer button (yellow)
+Two timestamp rows showing current GMT time with colored dot indicators
+Buy/Place trade button that executes an Accumulators contract via Deriv WebSocket when clicked
+
+Connect everything to Deriv WebSocket API using app_id=339IyLjCcUmBEXEzG6tsS for live prices and trade execution.
