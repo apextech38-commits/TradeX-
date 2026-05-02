@@ -261,37 +261,36 @@ export default function Charts() {
     <div className="flex flex-col bg-background"
       style={{ height: "calc(100vh - 120px)", overflow: "hidden" }}>
 
-      {/* Header */}
-      <div className="flex items-center justify-between gap-3 px-5 py-2.5 bg-card border-b border-border shrink-0 flex-wrap">
+      {/* Header — symbol selector + status dot + UTC clock */}
+      <div className="flex items-center gap-2 px-3 sm:px-5 py-2 bg-card border-b border-border shrink-0 flex-wrap gap-y-1">
         <select
           value={sym.id}
           onChange={e => setSym(SYMBOLS.find(s => s.id === e.target.value) || SYMBOLS[0])}
-          className="bg-background border border-border rounded-md text-foreground text-xs px-3 py-1.5 focus:outline-none focus:border-primary cursor-pointer"
+          className="bg-background border border-border rounded-md text-foreground text-xs px-2 py-1.5 focus:outline-none focus:border-primary cursor-pointer max-w-[180px] sm:max-w-none"
         >
           {SYMBOLS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
         </select>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-1.5 min-w-0">
           <span className="w-2 h-2 rounded-full shrink-0 transition-colors"
             style={{ background: dotColor, boxShadow: `0 0 6px ${dotColor}` }}/>
-          <span className="text-sm font-bold text-foreground">{sym.label}</span>
-          <span className="text-[10px] font-mono text-muted-foreground bg-secondary px-2 py-0.5 rounded border border-border">
-            {sym.id} · TICK
+          <span className="text-xs font-mono text-muted-foreground bg-secondary px-1.5 py-0.5 rounded border border-border shrink-0">
+            {sym.id}
           </span>
         </div>
 
-        <span className="text-xs font-mono text-muted-foreground">{utcTime}</span>
+        <span className="text-[10px] font-mono text-muted-foreground ml-auto hidden sm:block">{utcTime}</span>
       </div>
 
-      {/* Price bar */}
-      <div className="flex items-center gap-5 px-5 py-2 bg-card border-b border-border shrink-0 flex-wrap">
-        <span className="text-3xl font-bold font-mono tracking-tight transition-colors duration-200"
+      {/* Price bar — compact on mobile */}
+      <div className="flex items-center gap-3 px-3 sm:px-5 py-1.5 bg-card border-b border-border shrink-0 flex-wrap gap-y-1">
+        <span className="text-xl sm:text-3xl font-bold font-mono tracking-tight transition-colors duration-200"
           style={{ color: priceColor }}>
           {price !== null ? price.toFixed(3) : "---.---"}
         </span>
 
         {priceChange !== null && pricePct !== null && (
-          <span className="text-xs font-semibold font-mono px-2 py-1 rounded"
+          <span className="text-xs font-semibold font-mono px-2 py-0.5 rounded"
             style={{
               background: priceChange >= 0 ? "rgba(34,197,94,0.1)" : "rgba(239,68,68,0.1)",
               color: changeColor,
@@ -300,21 +299,24 @@ export default function Charts() {
           </span>
         )}
 
-        {statItems.map(s => (
-          <div key={s.label} className="flex flex-col gap-0.5">
-            <span className="text-[10px] font-mono text-muted-foreground tracking-widest uppercase">{s.label}</span>
-            <span className="text-sm font-mono text-foreground">{s.value}</span>
-          </div>
-        ))}
+        {/* Stats — 2-column grid on mobile, row on desktop */}
+        <div className="grid grid-cols-2 sm:flex sm:flex-row gap-x-4 gap-y-0.5 sm:gap-5 ml-auto sm:ml-0">
+          {statItems.map(s => (
+            <div key={s.label} className="flex items-baseline gap-1">
+              <span className="text-[9px] font-mono text-muted-foreground tracking-widest uppercase">{s.label}</span>
+              <span className="text-xs font-mono text-foreground">{s.value}</span>
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* Chart area */}
-      <div className="flex-1 flex flex-col min-h-0 p-4 gap-3">
+      <div className="flex-1 flex flex-col min-h-0 p-2 sm:p-4 gap-2 sm:gap-3">
         <div className="flex items-center gap-2 shrink-0">
           <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest mr-1">Show:</span>
           {[100, 200, 500].map(n => (
             <button key={n} onClick={() => setMaxVisible(n)}
-              className={`px-3 py-1 text-xs font-mono rounded border transition-colors ${
+              className={`px-2 sm:px-3 py-1 text-xs font-mono rounded border transition-colors ${
                 maxVisible === n
                   ? "border-primary text-primary bg-primary/5"
                   : "border-border text-muted-foreground bg-card hover:border-primary/50 hover:text-foreground"
@@ -324,7 +326,7 @@ export default function Charts() {
           ))}
         </div>
 
-        <div className="flex-1 min-h-0 bg-card border border-border rounded-xl p-3 relative">
+        <div className="flex-1 min-h-[200px] bg-card border border-border rounded-xl p-2 sm:p-3 relative">
           {points.length < 2 ? (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
               <div className={`w-8 h-8 rounded-full border-[3px] animate-spin ${
@@ -336,7 +338,7 @@ export default function Charts() {
             </div>
           ) : (
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={points} margin={{ top: 4, right: 60, left: 0, bottom: 0 }}>
+              <AreaChart data={points} margin={{ top: 4, right: 48, left: 0, bottom: 0 }}>
                 <defs>
                   <linearGradient id="txChartGrad" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%"   stopColor={PRIMARY} stopOpacity={0.2}/>
@@ -345,16 +347,16 @@ export default function Charts() {
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke={gridColor} vertical={false}/>
                 <XAxis dataKey="time"
-                  tick={{ fill: axisColor, fontSize: 9, fontFamily: "monospace" }}
+                  tick={{ fill: axisColor, fontSize: 8, fontFamily: "monospace" }}
                   tickLine={false} axisLine={false}
                   interval="preserveStartEnd"
                 />
                 <YAxis orientation="right"
                   domain={[yMin ?? "auto", yMax ?? "auto"]}
-                  tick={{ fill: axisColor, fontSize: 9, fontFamily: "monospace" }}
+                  tick={{ fill: axisColor, fontSize: 8, fontFamily: "monospace" }}
                   tickLine={false} axisLine={false}
                   tickFormatter={(v: number) => v.toFixed(2)}
-                  width={62}
+                  width={52}
                 />
                 <Tooltip content={<CustomTooltip/>}/>
                 <Area type="monotone" dataKey="value"
@@ -370,15 +372,15 @@ export default function Charts() {
       </div>
 
       {/* Footer */}
-      <div className="flex items-center justify-between px-5 py-2 bg-card border-t border-border shrink-0 flex-wrap gap-2">
-        <span className="text-[11px] font-mono font-semibold"
+      <div className="flex items-center justify-between px-3 sm:px-5 py-1.5 bg-card border-t border-border shrink-0 gap-2 flex-wrap">
+        <span className="text-[10px] font-mono font-semibold"
           style={{ color: connOk === true ? GREEN : connOk === false ? RED : YELLOW }}>
           {connStatus}
         </span>
-        <span className="text-[11px] font-mono text-muted-foreground">
+        <span className="text-[10px] font-mono text-muted-foreground hidden sm:block">
           Powered by Deriv WebSocket API
         </span>
-        <span className="text-[11px] font-mono text-muted-foreground">
+        <span className="text-[10px] font-mono text-muted-foreground">
           Last tick: {lastTickTime}
         </span>
       </div>

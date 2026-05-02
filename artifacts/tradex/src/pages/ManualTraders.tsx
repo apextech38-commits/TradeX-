@@ -557,26 +557,26 @@ export default function ManualTraders() {
   const yMax = points.length ? Math.max(...points.map(p => p.value)) * 1.0001 : undefined;
 
   return (
-    <div className="flex h-full bg-background" style={{ height: "calc(100vh - 120px)" }}>
+    <div className="flex flex-col md:flex-row bg-background overflow-hidden" style={{ height: "calc(100vh - 120px)" }}>
 
       {/* ── Left: Chart ──────────────────────────────────────────────────── */}
-      <div className="flex-1 min-w-0 flex flex-col border-r border-border">
+      <div className="h-[45vh] md:h-auto md:flex-1 min-w-0 flex flex-col border-b md:border-b-0 md:border-r border-border overflow-hidden">
 
         {/* Symbol header */}
-        <div className="flex items-center gap-3 px-4 py-2.5 bg-card border-b border-border shrink-0 flex-wrap gap-y-2">
+        <div className="flex items-center gap-2 px-3 py-2 bg-card border-b border-border shrink-0 flex-wrap gap-y-1">
           <div className="flex items-center gap-2">
-            <div className={`w-2 h-2 rounded-full ${connOk === true ? "bg-[#22C55E]" : connOk === false ? "bg-[#EF4444]" : "bg-[#FACC15] animate-pulse"}`}/>
+            <div className={`w-2 h-2 rounded-full shrink-0 ${connOk === true ? "bg-[#22C55E]" : connOk === false ? "bg-[#EF4444]" : "bg-[#FACC15] animate-pulse"}`}/>
             <select
               value={sym.id}
               onChange={e => setSym(SYMBOLS.find(s => s.id === e.target.value) || SYMBOLS[0])}
-              className="bg-transparent border-none text-sm font-semibold text-foreground focus:outline-none cursor-pointer"
+              className="bg-transparent border-none text-xs sm:text-sm font-semibold text-foreground focus:outline-none cursor-pointer max-w-[160px] sm:max-w-none"
             >
               {SYMBOLS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
             </select>
           </div>
 
           <div className="flex items-center gap-2 ml-1">
-            <span className={`text-lg font-bold font-mono ${
+            <span className={`text-base sm:text-lg font-bold font-mono ${
               price !== null && prevPrice !== null
                 ? price > prevPrice ? "text-[#22C55E]" : price < prevPrice ? "text-[#EF4444]" : "text-foreground"
                 : "text-foreground"
@@ -592,7 +592,7 @@ export default function ManualTraders() {
         </div>
 
         {/* Chart */}
-        <div className="flex-1 min-h-0 bg-background p-3 relative">
+        <div className="flex-1 min-h-0 bg-background p-2 sm:p-3 relative">
           {points.length < 2 ? (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
               <div className="w-7 h-7 rounded-full border-[3px] border-primary/20 border-t-primary animate-spin"/>
@@ -636,7 +636,7 @@ export default function ManualTraders() {
       </div>
 
       {/* ── Right: Trade panel ───────────────────────────────────────────── */}
-      <div className="w-72 shrink-0 flex flex-col bg-card overflow-y-auto">
+      <div className="flex-1 md:flex-none md:w-72 flex flex-col bg-card overflow-y-auto">
 
         {/* Learn link */}
         <div className="flex items-center justify-end gap-1 px-4 py-2 border-b border-border shrink-0">
