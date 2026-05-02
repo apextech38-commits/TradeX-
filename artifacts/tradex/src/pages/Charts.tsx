@@ -1,12 +1,16 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
   AreaChart, Area, ResponsiveContainer,
   XAxis, YAxis, CartesianGrid, Tooltip,
 } from "recharts";
 import { useTheme } from "@/components/ThemeProvider";
+import { DERIV_APP_ID } from "@/context/AuthContext";
 
+const WS_URL    = `wss://ws.binaryws.com/websockets/v3?app_id=${DERIV_APP_ID}`;
+const TOKEN_KEY = "deriv_token";
 const MAX_TICKS = 100;
-const RETRY_DELAY_MS = 4_000;
+const OPEN_TIMEOUT_MS = 5_000;
+const RETRY_DELAY_MS  = 3_000;
 
 const SYMBOLS = [
   { label: "V 10",  id: "R_10"  },
@@ -26,16 +30,17 @@ function fmt(epoch: number) {
 
 export default function Charts() {
   const { theme } = useTheme();
-  const [activeSymbol, setActiveSymbol] = useState(SYMBOLS[4]);
-  const [data, setData]         = useState<ChartPoint[]>([]);
-  const [connected, setConnected] = useState(false);
-  const [statusLabel, setStatusLabel] = useState("Loading...");
-  const [retryCount, setRetryCount]   = useState(0);
+  const [activeSymbol, setActiveSymbol] = useState(SYMBOLS[4]); // V 100 default
+  const [data, setData]           = useState<ChartPoint[]>([]);
+  const [statusLabel, setStatusLabel] = useState("Connecting...");
+  const [connected, setConnected]     = useState(false);
 
-  const esRef        = useRef<EventSource | null>(null);
+  const wsRef         = useRef<WebSocket | null>(null);
+  const mountRef      = useRef(true);
+  const retryRef      = useRef(0);
+  const openTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const mountRef     = useRef(true);
-  const symRef       = useRef(activeSymbol.id);
+  const symRef        = useRef(activeSymbol.id);
 
   const isDark      = theme === "dark";
   const strokeColor = "#3B82F6";
@@ -43,94 +48,133 @@ export default function Charts() {
   const tooltipBg   = isDark ? "#121821" : "#fff";
   const tooltipBd   = isDark ? "#1F2933" : "#e5e7eb";
 
-  const stopStream = () => {
-    if (esRef.current) { esRef.current.close(); esRef.current = null; }
+  const clearTimers = useCallback(() => {
+    if (openTimerRef.current)  { clearTimeout(openTimerRef.current);  openTimerRef.current  = null; }
     if (retryTimerRef.current) { clearTimeout(retryTimerRef.current); retryTimerRef.current = null; }
-  };
+  }, []);
 
-  useEffect(() => {
-    mountRef.current = true;
-    symRef.current = activeSymbol.id;
-    setData([]);
-    setConnected(false);
-    setRetryCount(0);
-    setStatusLabel("Loading...");
-    stopStream();
+  const connect = useCallback(() => {
+    if (!mountRef.current) return;
+    clearTimers();
 
-    let attempt = 0;
+    if (wsRef.current) {
+      wsRef.current.onclose = null;
+      wsRef.current.close();
+      wsRef.current = null;
+    }
 
-    const start = () => {
+    const ws = new WebSocket(WS_URL);
+    wsRef.current = ws;
+
+    // 5-second open timeout → retry
+    openTimerRef.current = setTimeout(() => {
       if (!mountRef.current) return;
-      const sym = symRef.current;
+      if (ws.readyState !== WebSocket.OPEN) {
+        ws.onclose = null;
+        ws.close();
+        retryRef.current++;
+        setConnected(false);
+        setStatusLabel(`Reconnecting... (attempt ${retryRef.current})`);
+        retryTimerRef.current = setTimeout(connect, RETRY_DELAY_MS);
+      }
+    }, OPEN_TIMEOUT_MS);
 
-      setStatusLabel(attempt === 0 ? "Loading..." : `Reconnecting... (attempt ${attempt})`);
-      setConnected(false);
+    ws.onopen = () => {
+      if (!mountRef.current) return;
+      clearTimers();
+      retryRef.current = 0;
+      setConnected(true);
+      setStatusLabel("Live");
 
-      fetch(`/api/ticks/${sym}?count=${MAX_TICKS}`)
-        .then(r => {
-          if (!r.ok) throw new Error(`HTTP ${r.status}`);
-          return r.json() as Promise<{ prices: number[]; times: number[]; error?: string }>;
-        })
-        .then(({ prices, times, error }) => {
-          if (!mountRef.current || symRef.current !== sym) return;
-          if (error) throw new Error(error);
+      const sym   = symRef.current;
+      const token = localStorage.getItem(TOKEN_KEY);
 
+      const requestHistory = () => {
+        ws.send(JSON.stringify({
+          ticks_history: sym,
+          count:   MAX_TICKS,
+          end:     "latest",
+          start:   1,
+          style:   "ticks",
+          subscribe: 1,
+        }));
+      };
+
+      if (token) {
+        ws.send(JSON.stringify({ authorize: token }));
+        // requestHistory called on authorize response
+        (ws as any).__pendingHistory = requestHistory;
+      } else {
+        requestHistory();
+      }
+    };
+
+    ws.onmessage = (evt) => {
+      if (!mountRef.current) return;
+      try {
+        const msg = JSON.parse(evt.data);
+        if (msg.error) {
+          console.warn("[Charts WS]", msg.error.message);
+          return;
+        }
+
+        if (msg.msg_type === "authorize") {
+          const fn = (ws as any).__pendingHistory;
+          if (fn) { fn(); delete (ws as any).__pendingHistory; }
+          return;
+        }
+
+        // Bulk history → populate chart immediately
+        if (msg.msg_type === "history") {
+          const { prices, times } = msg.history as { prices: number[]; times: number[] };
           const points: ChartPoint[] = prices.map((p, i) => ({
-            time: fmt(times[i]),
+            time:  fmt(times[i]),
             value: p,
           }));
           setData(points.slice(-MAX_TICKS));
+          return;
+        }
 
-          const es = new EventSource(`/api/ticks/stream/${sym}`);
-          esRef.current = es;
-
-          es.onopen = () => {
-            if (!mountRef.current || symRef.current !== sym) { es.close(); return; }
-            attempt = 0;
-            setRetryCount(0);
-            setConnected(true);
-            setStatusLabel("Live");
-          };
-
-          es.onmessage = (evt) => {
-            if (!mountRef.current || symRef.current !== sym) return;
-            try {
-              const { value, epoch, error: err } = JSON.parse(evt.data);
-              if (err) { es.close(); return; }
-              setData(prev => {
-                const next = [...prev, { time: fmt(epoch), value }];
-                return next.length > MAX_TICKS ? next.slice(-MAX_TICKS) : next;
-              });
-            } catch (_) {}
-          };
-
-          es.onerror = () => {
-            if (!mountRef.current || symRef.current !== sym) return;
-            es.close();
-            esRef.current = null;
-            setConnected(false);
-            attempt++;
-            setRetryCount(attempt);
-            setStatusLabel(`Reconnecting... (attempt ${attempt})`);
-            retryTimerRef.current = setTimeout(start, RETRY_DELAY_MS);
-          };
-        })
-        .catch(() => {
-          if (!mountRef.current || symRef.current !== sym) return;
-          attempt++;
-          setRetryCount(attempt);
-          setStatusLabel(`Reconnecting... (attempt ${attempt})`);
-          retryTimerRef.current = setTimeout(start, RETRY_DELAY_MS);
-        });
+        // Live tick → append
+        if (msg.msg_type === "tick") {
+          const { quote, epoch } = msg.tick;
+          setData(prev => {
+            const next = [...prev, { time: fmt(epoch), value: quote }];
+            return next.length > MAX_TICKS ? next.slice(-MAX_TICKS) : next;
+          });
+        }
+      } catch (_) {}
     };
 
-    start();
+    ws.onerror = () => {
+      if (mountRef.current) setConnected(false);
+    };
+
+    ws.onclose = () => {
+      if (!mountRef.current) return;
+      clearTimers();
+      setConnected(false);
+      retryRef.current++;
+      setStatusLabel(`Reconnecting... (attempt ${retryRef.current})`);
+      retryTimerRef.current = setTimeout(connect, RETRY_DELAY_MS);
+    };
+  }, [clearTimers]);
+
+  useEffect(() => {
+    mountRef.current = true;
+    symRef.current   = activeSymbol.id;
+    setData([]);
+    setConnected(false);
+    retryRef.current = 0;
+    setStatusLabel("Connecting...");
+    connect();
 
     return () => {
       mountRef.current = false;
-      stopStream();
+      clearTimers();
+      if (wsRef.current) { wsRef.current.onclose = null; wsRef.current.close(); }
     };
-  }, [activeSymbol.id]);
+  }, [activeSymbol.id, connect, clearTimers]);
 
   const latestVal  = data.length > 0 ? data[data.length - 1].value : null;
   const prevVal    = data.length >= 2 ? data[data.length - 2].value : null;
@@ -193,11 +237,6 @@ export default function Charts() {
                   : "border-[#3B82F6]/20 border-t-[#3B82F6]"
               }`} />
               <p className="text-sm text-muted-foreground">{statusLabel}</p>
-              {retryCount > 0 && (
-                <p className="text-xs text-muted-foreground opacity-60">
-                  Retry {retryCount} — check server connection
-                </p>
-              )}
             </div>
           </div>
         ) : (

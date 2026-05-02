@@ -1,6 +1,12 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Info, Settings } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
+import { DERIV_APP_ID } from "@/context/AuthContext";
+
+const WS_URL    = `wss://ws.binaryws.com/websockets/v3?app_id=${DERIV_APP_ID}`;
+const TOKEN_KEY = "deriv_token";
+const OPEN_TIMEOUT_MS = 5_000;
+const RETRY_DELAY_MS  = 3_000;
 
 const SYMBOLS = [
   { label: "Volatility 10 (1s) Index", id: "R_10"  },
@@ -10,114 +16,160 @@ const SYMBOLS = [
   { label: "Volatility 100 Index",      id: "R_100" },
 ];
 
-const RETRY_DELAY_MS = 4_000;
-const HISTORY_COUNT  = 1000;
-
 function lastDigit(quote: number): number {
   return parseInt(quote.toFixed(2).slice(-1));
 }
 
 export default function AnalysisTool() {
-  const [selectedSym, setSelectedSym] = useState(SYMBOLS[0]);
-  const [history, setHistory]         = useState<number[]>([]);
-  const [latestPrice, setLatestPrice] = useState<number | null>(null);
-  const [tickWindow, setTickWindow]   = useState(1000);
-  const [connected, setConnected]     = useState(false);
-  const [matchDigit, setMatchDigit]   = useState(0);
-  const [statusLabel, setStatusLabel] = useState("Loading...");
+  const [selectedSym,  setSelectedSym]  = useState(SYMBOLS[0]);
+  const [history,      setHistory]      = useState<number[]>([]);
+  const [latestPrice,  setLatestPrice]  = useState<number | null>(null);
+  const [tickWindow,   setTickWindow]   = useState(1000);
+  const [connected,    setConnected]    = useState(false);
+  const [matchDigit,   setMatchDigit]   = useState(0);
+  const [statusLabel,  setStatusLabel]  = useState("Connecting...");
 
-  const esRef         = useRef<EventSource | null>(null);
-  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const wsRef         = useRef<WebSocket | null>(null);
   const mountRef      = useRef(true);
+  const retryRef      = useRef(0);
+  const openTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const symRef        = useRef(selectedSym.id);
+  const windowRef     = useRef(tickWindow);
 
-  const stopStream = () => {
-    if (esRef.current)       { esRef.current.close(); esRef.current = null; }
+  // Keep windowRef in sync
+  useEffect(() => { windowRef.current = tickWindow; }, [tickWindow]);
+
+  const clearTimers = useCallback(() => {
+    if (openTimerRef.current)  { clearTimeout(openTimerRef.current);  openTimerRef.current  = null; }
     if (retryTimerRef.current) { clearTimeout(retryTimerRef.current); retryTimerRef.current = null; }
-  };
+  }, []);
 
+  const connect = useCallback(() => {
+    if (!mountRef.current) return;
+    clearTimers();
+
+    if (wsRef.current) {
+      wsRef.current.onclose = null;
+      wsRef.current.close();
+      wsRef.current = null;
+    }
+
+    const ws = new WebSocket(WS_URL);
+    wsRef.current = ws;
+
+    // 5-second open timeout → retry
+    openTimerRef.current = setTimeout(() => {
+      if (!mountRef.current) return;
+      if (ws.readyState !== WebSocket.OPEN) {
+        ws.onclose = null;
+        ws.close();
+        retryRef.current++;
+        setConnected(false);
+        setStatusLabel(`Reconnecting... (attempt ${retryRef.current})`);
+        retryTimerRef.current = setTimeout(connect, RETRY_DELAY_MS);
+      }
+    }, OPEN_TIMEOUT_MS);
+
+    ws.onopen = () => {
+      if (!mountRef.current) return;
+      clearTimers();
+      retryRef.current = 0;
+      setConnected(true);
+      setStatusLabel("Live");
+
+      const sym   = symRef.current;
+      const token = localStorage.getItem(TOKEN_KEY);
+
+      const requestHistory = () => {
+        ws.send(JSON.stringify({
+          ticks_history: sym,
+          count:   1000,
+          end:     "latest",
+          start:   1,
+          style:   "ticks",
+          subscribe: 1,
+        }));
+      };
+
+      if (token) {
+        ws.send(JSON.stringify({ authorize: token }));
+        (ws as any).__pendingHistory = requestHistory;
+      } else {
+        requestHistory();
+      }
+    };
+
+    ws.onmessage = (evt) => {
+      if (!mountRef.current) return;
+      try {
+        const msg = JSON.parse(evt.data);
+        if (msg.error) {
+          console.warn("[AnalysisTool WS]", msg.error.message);
+          return;
+        }
+
+        if (msg.msg_type === "authorize") {
+          const fn = (ws as any).__pendingHistory;
+          if (fn) { fn(); delete (ws as any).__pendingHistory; }
+          return;
+        }
+
+        // Bulk history → populate digit table immediately
+        if (msg.msg_type === "history") {
+          const prices: number[] = msg.history?.prices ?? [];
+          const digits = prices.map(lastDigit);
+          setHistory(digits.slice(-windowRef.current));
+          if (prices.length > 0) setLatestPrice(prices[prices.length - 1]);
+          return;
+        }
+
+        // Live tick → append digit
+        if (msg.msg_type === "tick") {
+          const quote: number = msg.tick.quote;
+          setLatestPrice(quote);
+          const d = lastDigit(quote);
+          setHistory(prev => {
+            const next = [...prev, d];
+            return next.length > windowRef.current ? next.slice(-windowRef.current) : next;
+          });
+        }
+      } catch (_) {}
+    };
+
+    ws.onerror = () => {
+      if (mountRef.current) setConnected(false);
+    };
+
+    ws.onclose = () => {
+      if (!mountRef.current) return;
+      clearTimers();
+      setConnected(false);
+      retryRef.current++;
+      setStatusLabel(`Reconnecting... (attempt ${retryRef.current})`);
+      retryTimerRef.current = setTimeout(connect, RETRY_DELAY_MS);
+    };
+  }, [clearTimers]);
+
+  // Reconnect when symbol changes
   useEffect(() => {
     mountRef.current = true;
-    symRef.current = selectedSym.id;
+    symRef.current   = selectedSym.id;
     setHistory([]);
     setLatestPrice(null);
     setConnected(false);
-    setStatusLabel("Loading...");
-    stopStream();
-
-    let attempt = 0;
-
-    const start = () => {
-      if (!mountRef.current) return;
-      const sym = symRef.current;
-
-      setStatusLabel(attempt === 0 ? "Loading..." : `Reconnecting... (attempt ${attempt})`);
-      setConnected(false);
-
-      fetch(`/api/ticks/${sym}?count=${HISTORY_COUNT}`)
-        .then(r => {
-          if (!r.ok) throw new Error(`HTTP ${r.status}`);
-          return r.json() as Promise<{ prices: number[]; times: number[]; error?: string }>;
-        })
-        .then(({ prices, error }) => {
-          if (!mountRef.current || symRef.current !== sym) return;
-          if (error) throw new Error(error);
-
-          const digits = prices.map(lastDigit);
-          setHistory(digits.slice(-tickWindow));
-          if (prices.length > 0) setLatestPrice(prices[prices.length - 1]);
-
-          const es = new EventSource(`/api/ticks/stream/${sym}`);
-          esRef.current = es;
-
-          es.onopen = () => {
-            if (!mountRef.current || symRef.current !== sym) { es.close(); return; }
-            attempt = 0;
-            setConnected(true);
-            setStatusLabel("Live");
-          };
-
-          es.onmessage = (evt) => {
-            if (!mountRef.current || symRef.current !== sym) return;
-            try {
-              const { value, error: err } = JSON.parse(evt.data) as { value?: number; epoch?: number; error?: string };
-              if (err || value === undefined) { es.close(); return; }
-              setLatestPrice(value);
-              const d = lastDigit(value);
-              setHistory(prev => {
-                const next = [...prev, d];
-                return next.length > tickWindow ? next.slice(-tickWindow) : next;
-              });
-            } catch (_) {}
-          };
-
-          es.onerror = () => {
-            if (!mountRef.current || symRef.current !== sym) return;
-            es.close();
-            esRef.current = null;
-            setConnected(false);
-            attempt++;
-            setStatusLabel(`Reconnecting... (attempt ${attempt})`);
-            retryTimerRef.current = setTimeout(start, RETRY_DELAY_MS);
-          };
-        })
-        .catch(() => {
-          if (!mountRef.current || symRef.current !== sym) return;
-          attempt++;
-          setStatusLabel(`Reconnecting... (attempt ${attempt})`);
-          retryTimerRef.current = setTimeout(start, RETRY_DELAY_MS);
-        });
-    };
-
-    start();
+    retryRef.current = 0;
+    setStatusLabel("Connecting...");
+    connect();
 
     return () => {
       mountRef.current = false;
-      stopStream();
+      clearTimers();
+      if (wsRef.current) { wsRef.current.onclose = null; wsRef.current.close(); }
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedSym.id]);
+  }, [selectedSym.id, connect, clearTimers]);
 
+  // Trim when window shrinks
   useEffect(() => {
     setHistory(prev => prev.length > tickWindow ? prev.slice(-tickWindow) : prev);
   }, [tickWindow]);
@@ -259,8 +311,8 @@ export default function AnalysisTool() {
             <div className="bg-card border border-border rounded-xl p-5 space-y-4 shadow-sm">
               <h3 className="font-semibold text-foreground text-sm">Even / Odd</h3>
               {[
-                { label: "Even", pct: (evenCount / total) * 100, count: evenCount, color: "bg-primary",            textColor: "text-primary" },
-                { label: "Odd",  pct: (oddCount  / total) * 100, count: oddCount,  color: "bg-muted-foreground",   textColor: "text-muted-foreground" },
+                { label: "Even", pct: (evenCount / total) * 100, count: evenCount, color: "bg-primary",          textColor: "text-primary" },
+                { label: "Odd",  pct: (oddCount  / total) * 100, count: oddCount,  color: "bg-muted-foreground", textColor: "text-muted-foreground" },
               ].map(({ label, pct, count, color, textColor }) => (
                 <div key={label}>
                   <div className="flex justify-between text-sm mb-1">
@@ -286,9 +338,9 @@ export default function AnalysisTool() {
             <div className="bg-card border border-border rounded-xl p-5 space-y-4 shadow-sm">
               <h3 className="font-semibold text-foreground text-sm">Over / Under 5</h3>
               {[
-                { label: "Under", pct: (under5 / total) * 100, count: under5, color: "bg-[#EF4444]",          textColor: "text-[#EF4444]" },
-                { label: "Equal", pct: (eq5    / total) * 100, count: eq5,    color: "bg-muted-foreground",   textColor: "text-muted-foreground" },
-                { label: "Over",  pct: (over5  / total) * 100, count: over5,  color: "bg-[#22C55E]",          textColor: "text-[#22C55E]" },
+                { label: "Under", pct: (under5 / total) * 100, count: under5, color: "bg-[#EF4444]",        textColor: "text-[#EF4444]" },
+                { label: "Equal", pct: (eq5    / total) * 100, count: eq5,    color: "bg-muted-foreground", textColor: "text-muted-foreground" },
+                { label: "Over",  pct: (over5  / total) * 100, count: over5,  color: "bg-[#22C55E]",        textColor: "text-[#22C55E]" },
               ].map(({ label, pct, count, color, textColor }) => (
                 <div key={label}>
                   <div className="flex justify-between text-sm mb-1">
