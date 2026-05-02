@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -28,7 +28,16 @@ function AppContent() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState(TABS[0]);
 
-  // Detect /callback route without a routing library
+  // Listen for programmatic navigation (e.g. from TradingBots "Load Bot")
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const tab = (e as CustomEvent<string>).detail;
+      if (TABS.includes(tab)) setActiveTab(tab);
+    };
+    window.addEventListener("tradex:navigate", handler);
+    return () => window.removeEventListener("tradex:navigate", handler);
+  }, []);
+
   const isCallback = window.location.pathname.endsWith("/callback");
   if (isCallback) return <Callback />;
 
@@ -38,27 +47,25 @@ function AppContent() {
 
   const renderContent = () => {
     switch (activeTab) {
-      case "Dashboard":     return <Dashboard />;
-      case "Bot Builder":   return <BotBuilder />;
-      case "Manual Traders":return <ManualTraders />;
-      case "Charts":        return <Charts />;
-      case "Trading Bots":  return <TradingBots />;
-      case "Analysis Tool": return <AnalysisTool />;
-      case "Strategies":    return <Strategies />;
-      case "Copy Trading":  return <CopyTrading />;
-      case "TradingView":   return <TradingView />;
-      default:              return <Dashboard />;
+      case "Dashboard":      return <Dashboard />;
+      case "Bot Builder":    return <BotBuilder />;
+      case "Manual Traders": return <ManualTraders />;
+      case "Charts":         return <Charts />;
+      case "Trading Bots":   return <TradingBots />;
+      case "Analysis Tool":  return <AnalysisTool />;
+      case "Strategies":     return <Strategies />;
+      case "Copy Trading":   return <CopyTrading />;
+      case "TradingView":    return <TradingView />;
+      default:               return <Dashboard />;
     }
   };
 
   return (
     <div className="min-h-screen w-full bg-background text-foreground font-sans flex flex-col pt-[56px] pb-[52px]">
       <Navbar activeTab={activeTab} setActiveTab={setActiveTab} />
-
       <main className="flex-1 flex flex-col w-full h-full overflow-y-auto">
         {renderContent()}
       </main>
-
       <BottomBar />
       <AIScanner />
     </div>
