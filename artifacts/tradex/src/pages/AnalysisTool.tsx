@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Info, Settings } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { DERIV_APP_ID } from "@/context/AuthContext";
@@ -26,21 +26,43 @@ export default function AnalysisTool() {
   const [connected, setConnected] = useState(false);
   const [matchDigit, setMatchDigit] = useState(0);
 
-  const wsRef    = useRef<WebSocket | null>(null);
-  const mountRef = useRef(true);
+  const wsRef         = useRef<WebSocket | null>(null);
+  const mountRef      = useRef(true);
+  const retryRef      = useRef(0);
+  const timeoutRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const symRef        = useRef(selectedSym.id);
+  const [statusLabel, setStatusLabel] = useState("Connecting...");
 
-  useEffect(() => {
-    mountRef.current = true;
-    setHistory([]);
-    setLatestPrice(null);
-    setConnected(false);
+  const clearTimers = () => {
+    if (timeoutRef.current)    { clearTimeout(timeoutRef.current);    timeoutRef.current    = null; }
+    if (retryTimerRef.current) { clearTimeout(retryTimerRef.current); retryTimerRef.current = null; }
+  };
+
+  const connectWS = useCallback(() => {
+    if (!mountRef.current) return;
+    clearTimers();
+
+    if (wsRef.current) { wsRef.current.onclose = null; wsRef.current.close(); }
 
     const ws = new WebSocket(WS_URL);
     wsRef.current = ws;
 
-    const subscribe = () => {
+    // 5-second connection timeout
+    timeoutRef.current = setTimeout(() => {
+      if (!mountRef.current) return;
+      if (ws.readyState !== WebSocket.OPEN) {
+        ws.onclose = null;
+        ws.close();
+        retryRef.current++;
+        setStatusLabel(`Reconnecting... (attempt ${retryRef.current})`);
+        retryTimerRef.current = setTimeout(connectWS, 3000);
+      }
+    }, 5000);
+
+    const sendHistory = () => {
       ws.send(JSON.stringify({
-        ticks_history: selectedSym.id,
+        ticks_history: symRef.current,
         count: 1000,
         end: "latest",
         start: 1,
@@ -51,12 +73,15 @@ export default function AnalysisTool() {
 
     ws.onopen = () => {
       if (!mountRef.current) return;
+      clearTimers();
+      retryRef.current = 0;
       setConnected(true);
+      setStatusLabel("Live");
       const token = localStorage.getItem(TOKEN_KEY);
       if (token) {
         ws.send(JSON.stringify({ authorize: token }));
       } else {
-        subscribe();
+        sendHistory();
       }
     };
 
@@ -66,23 +91,16 @@ export default function AnalysisTool() {
         const msg = JSON.parse(evt.data);
         if (msg.error) return;
 
-        // After auth, subscribe
-        if (msg.msg_type === "authorize") {
-          subscribe();
-          return;
-        }
+        if (msg.msg_type === "authorize") { sendHistory(); return; }
 
-        // History response — bulk populate
         if (msg.msg_type === "history") {
           const prices: number[] = msg.history?.prices ?? [];
           const digits = prices.map(lastDigit);
           setHistory(digits);
-          if (prices.length > 0)
-            setLatestPrice(prices[prices.length - 1]);
+          if (prices.length > 0) setLatestPrice(prices[prices.length - 1]);
           return;
         }
 
-        // Live tick update
         if (msg.msg_type === "tick") {
           const quote: number = msg.tick.quote;
           setLatestPrice(quote);
@@ -95,15 +113,34 @@ export default function AnalysisTool() {
       } catch (_) {}
     };
 
-    ws.onerror = () => setConnected(false);
-    ws.onclose = () => { if (mountRef.current) setConnected(false); };
+    ws.onerror = () => { if (mountRef.current) setConnected(false); };
+
+    ws.onclose = () => {
+      if (!mountRef.current) return;
+      setConnected(false);
+      retryRef.current++;
+      setStatusLabel(`Reconnecting... (attempt ${retryRef.current})`);
+      retryTimerRef.current = setTimeout(connectWS, 3000);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    mountRef.current = true;
+    symRef.current = selectedSym.id;
+    setHistory([]);
+    setLatestPrice(null);
+    setConnected(false);
+    retryRef.current = 0;
+    setStatusLabel("Connecting...");
+    connectWS();
 
     return () => {
       mountRef.current = false;
-      ws.onclose = null;
-      ws.close();
+      clearTimers();
+      if (wsRef.current) { wsRef.current.onclose = null; wsRef.current.close(); }
     };
-  }, [selectedSym.id]);
+  }, [selectedSym.id, connectWS]);
 
   // Trim history when window changes
   useEffect(() => {
@@ -151,8 +188,12 @@ export default function AnalysisTool() {
             <Info className="w-5 h-5" />
           </button>
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <span className={`w-2 h-2 rounded-full ${connected ? "bg-[#22C55E]" : "bg-[#FACC15] animate-pulse"}`} />
-            {connected ? "Live" : "Connecting..."}
+            <span className={`w-2 h-2 rounded-full ${
+              connected ? "bg-[#22C55E]" :
+              statusLabel.startsWith("Reconnecting") ? "bg-[#EF4444] animate-pulse" :
+              "bg-[#FACC15] animate-pulse"
+            }`} />
+            {statusLabel}
           </div>
         </div>
         <button className="bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-md text-sm font-medium flex items-center justify-center gap-2 transition-colors">
