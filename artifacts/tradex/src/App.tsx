@@ -4,6 +4,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { AuthProvider } from "@/context/AuthContext";
+import { BotProvider } from "@/context/BotContext";
 
 import LoadingScreen from "@/components/LoadingScreen";
 import Navbar, { TABS } from "@/components/Navbar";
@@ -68,12 +69,14 @@ function App() {
   return (
     <ThemeProvider defaultTheme="light" storageKey="tradex-theme-v3">
       <AuthProvider>
-        <QueryClientProvider client={queryClient}>
-          <TooltipProvider>
-            <AppContent />
-            <Toaster />
-          </TooltipProvider>
-        </QueryClientProvider>
+        <BotProvider>
+          <QueryClientProvider client={queryClient}>
+            <TooltipProvider>
+              <AppContent />
+              <Toaster />
+            </TooltipProvider>
+          </QueryClientProvider>
+        </BotProvider>
       </AuthProvider>
     </ThemeProvider>
   );
