@@ -6,10 +6,12 @@ import {
 import { useTheme } from "@/components/ThemeProvider";
 import { DERIV_APP_ID } from "@/context/AuthContext";
 
-const WS_URL       = `wss://ws.binaryws.com/websockets/v3?app_id=${DERIV_APP_ID}`;
-const RETRY_DELAY  = 3_000;
-const OPEN_TIMEOUT = 5_000;
-const MAX_STORE    = 2_000;
+const WS_URL          = `wss://ws.binaryws.com/websockets/v3?app_id=${DERIV_APP_ID}`;
+const RETRY_DELAY_MS  = 3_000;
+const OPEN_TIMEOUT_MS = 8_000;   // max wait for socket to open
+const HIST_TIMEOUT_MS = 10_000;  // max wait for history response after open
+const PING_INTERVAL   = 25_000;  // keepalive — Deriv drops connections without it
+const MAX_STORE       = 2_000;
 
 const SYMBOLS = [
   { id: "R_100",   label: "Volatility 100 Index"      },
@@ -47,7 +49,6 @@ export default function Charts() {
 
   const [sym, setSym]               = useState(SYMBOLS[0]);
   const [points, setPoints]         = useState<Point[]>([]);
-  const [allTicks, setAllTicks]     = useState<Tick[]>([]);
   const [maxVisible, setMaxVisible] = useState(100);
   const [price, setPrice]           = useState<number | null>(null);
   const [openPrice, setOpenPrice]   = useState<number | null>(null);
@@ -60,16 +61,17 @@ export default function Charts() {
   const [utcTime, setUtcTime]       = useState(utcNow);
   const [flashDir, setFlashDir]     = useState<"up"|"down"|null>(null);
 
-  const wsRef       = useRef<WebSocket | null>(null);
-  const mountRef    = useRef(true);
-  const retryRef    = useRef(0);
-  const openTimer   = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const retryTimer  = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const symRef      = useRef(sym.id);
-  const allTicksRef = useRef<Tick[]>([]);
-  const maxRef      = useRef(maxVisible);
+  const wsRef         = useRef<WebSocket | null>(null);
+  const mountRef      = useRef(true);
+  const retryRef      = useRef(0);
+  const openTimerRef  = useRef<ReturnType<typeof setTimeout>  | null>(null);
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout>  | null>(null);
+  const histTimerRef  = useRef<ReturnType<typeof setTimeout>  | null>(null);
+  const pingRef       = useRef<ReturnType<typeof setInterval> | null>(null);
+  const symRef        = useRef(sym.id);
+  const allTicksRef   = useRef<Tick[]>([]);
+  const maxRef        = useRef(maxVisible);
 
-  // UTC clock
   useEffect(() => {
     const id = setInterval(() => setUtcTime(utcNow()), 1000);
     return () => clearInterval(id);
@@ -80,34 +82,43 @@ export default function Charts() {
   const buildPoints = useCallback((ticks: Tick[], max: number): Point[] =>
     ticks.slice(-max).map(t => ({ time: fmtTime(t.epoch), value: t.quote })), []);
 
-  const clearTimers = useCallback(() => {
-    if (openTimer.current)  { clearTimeout(openTimer.current);  openTimer.current  = null; }
-    if (retryTimer.current) { clearTimeout(retryTimer.current); retryTimer.current = null; }
+  // Clear ALL timers and the ping interval
+  const clearAll = useCallback(() => {
+    if (openTimerRef.current)  { clearTimeout(openTimerRef.current);   openTimerRef.current  = null; }
+    if (retryTimerRef.current) { clearTimeout(retryTimerRef.current);  retryTimerRef.current = null; }
+    if (histTimerRef.current)  { clearTimeout(histTimerRef.current);   histTimerRef.current  = null; }
+    if (pingRef.current)       { clearInterval(pingRef.current);       pingRef.current       = null; }
   }, []);
+
+  const scheduleRetry = useCallback((ws: WebSocket, reason: string, connect: () => void) => {
+    ws.onclose = null;
+    ws.close();
+    clearAll();
+    if (!mountRef.current) return;
+    retryRef.current++;
+    setConnOk(false);
+    setConnStatus(`${reason} — retrying… (${retryRef.current})`);
+    retryTimerRef.current = setTimeout(connect, RETRY_DELAY_MS);
+  }, [clearAll]);
 
   const connect = useCallback(() => {
     if (!mountRef.current) return;
-    clearTimers();
+    clearAll();
     if (wsRef.current) { wsRef.current.onclose = null; wsRef.current.close(); wsRef.current = null; }
 
     const ws = new WebSocket(WS_URL);
     wsRef.current = ws;
 
-    openTimer.current = setTimeout(() => {
+    // ── Bug fix #1: timeout if socket never opens ──────────────────────────
+    openTimerRef.current = setTimeout(() => {
       if (!mountRef.current || ws.readyState === WebSocket.OPEN) return;
-      ws.onclose = null; ws.close();
-      retryRef.current++;
-      setConnOk(false);
-      setConnStatus(`Reconnecting… (attempt ${retryRef.current})`);
-      retryTimer.current = setTimeout(connect, RETRY_DELAY);
-    }, OPEN_TIMEOUT);
+      scheduleRetry(ws, "Connection timeout", connect);
+    }, OPEN_TIMEOUT_MS);
 
     ws.onopen = () => {
       if (!mountRef.current) return;
-      clearTimers();
-      retryRef.current = 0;
-      setConnOk(true);
-      setConnStatus("Live");
+      clearAll(); // clears openTimer
+
       ws.send(JSON.stringify({
         ticks_history: symRef.current,
         adjust_start_time: 1,
@@ -116,27 +127,51 @@ export default function Charts() {
         start: 1,
         style: "ticks",
       }));
+
+      // ── Bug fix #2: timeout if history response never arrives ────────────
+      histTimerRef.current = setTimeout(() => {
+        if (!mountRef.current) return;
+        scheduleRetry(ws, "History timeout", connect);
+      }, HIST_TIMEOUT_MS);
+
+      // ── Bug fix #3: keepalive ping — Deriv drops idle sockets after ~60s ─
+      pingRef.current = setInterval(() => {
+        if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ ping: 1 }));
+      }, PING_INTERVAL);
     };
 
     ws.onmessage = (evt) => {
       if (!mountRef.current) return;
       try {
         const msg = JSON.parse(evt.data);
-        if (msg.error) { setConnOk(false); setConnStatus(msg.error.message); return; }
+
+        // ── Bug fix #4: errors now close & retry instead of getting stuck ──
+        if (msg.error) {
+          console.warn("[Charts WS]", msg.error.code, msg.error.message);
+          scheduleRetry(ws, `Error: ${msg.error.message}`, connect);
+          return;
+        }
+
+        if (msg.msg_type === "pong") return; // keepalive response — ignore
 
         if (msg.msg_type === "history") {
+          // History arrived — cancel the history timeout
+          if (histTimerRef.current) { clearTimeout(histTimerRef.current); histTimerRef.current = null; }
+
           const { prices, times } = msg.history as { prices: number[]; times: number[] };
           const ticks: Tick[] = times.map((t, i) => ({ epoch: t, quote: prices[i] }));
           allTicksRef.current = ticks;
-          setAllTicks(ticks);
           setPoints(buildPoints(ticks, maxRef.current));
           setTickCount(ticks.length);
+          setConnOk(true);
+          setConnStatus("Live");
           if (prices.length > 0) {
             setOpenPrice(prices[0]);
             setPrice(prices[prices.length - 1]);
             setHigh(Math.max(...prices));
             setLow(Math.min(...prices));
           }
+          // Now subscribe for live ticks
           ws.send(JSON.stringify({ ticks: symRef.current, subscribe: 1 }));
           return;
         }
@@ -145,8 +180,7 @@ export default function Charts() {
           const { quote, epoch } = msg.tick as { quote: number; epoch: number };
           setPrice(prev => {
             if (prev !== null) {
-              const dir = quote >= prev ? "up" : "down";
-              setFlashDir(dir);
+              setFlashDir(quote >= prev ? "up" : "down");
               setTimeout(() => setFlashDir(null), 420);
             }
             return quote;
@@ -158,68 +192,67 @@ export default function Charts() {
           const updated = [...allTicksRef.current, { epoch, quote }];
           if (updated.length > MAX_STORE) updated.shift();
           allTicksRef.current = updated;
-          setAllTicks(updated);
           setPoints(buildPoints(updated, maxRef.current));
         }
       } catch (_) {}
     };
 
-    ws.onerror = () => { if (mountRef.current) { setConnOk(false); } };
+    ws.onerror = () => {
+      if (mountRef.current) { setConnOk(false); }
+    };
+
     ws.onclose = () => {
       if (!mountRef.current) return;
-      clearTimers();
+      clearAll();
       setConnOk(false);
       retryRef.current++;
-      setConnStatus(`Disconnected — reconnecting… (attempt ${retryRef.current})`);
-      retryTimer.current = setTimeout(connect, RETRY_DELAY);
+      setConnStatus(`Disconnected — reconnecting… (${retryRef.current})`);
+      retryTimerRef.current = setTimeout(connect, RETRY_DELAY_MS);
     };
-  }, [clearTimers, buildPoints]);
+  }, [clearAll, scheduleRetry, buildPoints]);
 
   useEffect(() => {
-    mountRef.current = true;
-    symRef.current   = sym.id;
+    mountRef.current    = true;
+    symRef.current      = sym.id;
     allTicksRef.current = [];
-    setAllTicks([]); setPoints([]); setPrice(null); setOpenPrice(null);
+    setPoints([]); setPrice(null); setOpenPrice(null);
     setHigh(-Infinity); setLow(Infinity); setTickCount(0);
     setConnOk(null); retryRef.current = 0;
     setConnStatus("Connecting…"); setLastTickTime("--");
     connect();
     return () => {
       mountRef.current = false;
-      clearTimers();
+      clearAll();
       if (wsRef.current) { wsRef.current.onclose = null; wsRef.current.close(); }
     };
-  }, [sym.id, connect, clearTimers]);
+  }, [sym.id, connect, clearAll]);
 
   useEffect(() => {
     setPoints(buildPoints(allTicksRef.current, maxVisible));
   }, [maxVisible, buildPoints]);
 
-  // ── Derived display values ─────────────────────────────────────────────────
   const priceChange = price !== null && openPrice !== null ? price - openPrice : null;
   const pricePct    = priceChange !== null && openPrice
     ? ((priceChange / openPrice) * 100).toFixed(2) : null;
 
-  // TradeX brand colors — only these three for semantic states
   const GREEN   = "#22C55E";
   const RED     = "#EF4444";
   const YELLOW  = "#FACC15";
   const PRIMARY = "#3B82F6";
 
-  const dotColor   = connOk === true ? GREEN : connOk === false ? RED : YELLOW;
-  const priceColor = flashDir === "up" ? GREEN : flashDir === "down" ? RED : "var(--color-foreground)";
+  const dotColor    = connOk === true ? GREEN : connOk === false ? RED : YELLOW;
+  const priceColor  = flashDir === "up" ? GREEN : flashDir === "down" ? RED : "var(--color-foreground)";
   const changeColor = priceChange !== null ? (priceChange >= 0 ? GREEN : RED) : "var(--color-muted-foreground)";
 
-  // Recharts theme-aware colors
-  const gridColor   = isDark ? "hsl(210 24% 16%)"  : "hsl(220 13% 91%)";
-  const axisColor   = isDark ? "hsl(218 11% 65%)"  : "hsl(215 28% 34%)";
+  const gridColor = isDark ? "hsl(210 24% 16%)"  : "hsl(220 13% 91%)";
+  const axisColor = isDark ? "hsl(218 11% 65%)"  : "hsl(215 28% 34%)";
 
   const yMin = points.length ? Math.min(...points.map(p => p.value)) * 0.9999 : undefined;
   const yMax = points.length ? Math.max(...points.map(p => p.value)) * 1.0001 : undefined;
 
   const statItems = [
-    { label: "HIGH",  value: high   > -Infinity ? high.toFixed(3)  : "--" },
-    { label: "LOW",   value: low    < Infinity  ? low.toFixed(3)   : "--" },
+    { label: "HIGH",  value: high   > -Infinity ? high.toFixed(3)      : "--" },
+    { label: "LOW",   value: low    < Infinity  ? low.toFixed(3)       : "--" },
     { label: "OPEN",  value: openPrice !== null  ? openPrice.toFixed(3) : "--" },
     { label: "TICKS", value: tickCount.toString() },
   ];
@@ -228,7 +261,7 @@ export default function Charts() {
     <div className="flex flex-col bg-background"
       style={{ height: "calc(100vh - 120px)", overflow: "hidden" }}>
 
-      {/* ── Header ─────────────────────────────────────────────────────────── */}
+      {/* Header */}
       <div className="flex items-center justify-between gap-3 px-5 py-2.5 bg-card border-b border-border shrink-0 flex-wrap">
         <select
           value={sym.id}
@@ -250,15 +283,13 @@ export default function Charts() {
         <span className="text-xs font-mono text-muted-foreground">{utcTime}</span>
       </div>
 
-      {/* ── Price bar ──────────────────────────────────────────────────────── */}
+      {/* Price bar */}
       <div className="flex items-center gap-5 px-5 py-2 bg-card border-b border-border shrink-0 flex-wrap">
-        {/* Price */}
         <span className="text-3xl font-bold font-mono tracking-tight transition-colors duration-200"
           style={{ color: priceColor }}>
           {price !== null ? price.toFixed(3) : "---.---"}
         </span>
 
-        {/* Change badge */}
         {priceChange !== null && pricePct !== null && (
           <span className="text-xs font-semibold font-mono px-2 py-1 rounded"
             style={{
@@ -269,7 +300,6 @@ export default function Charts() {
           </span>
         )}
 
-        {/* Stats */}
         {statItems.map(s => (
           <div key={s.label} className="flex flex-col gap-0.5">
             <span className="text-[10px] font-mono text-muted-foreground tracking-widest uppercase">{s.label}</span>
@@ -278,10 +308,8 @@ export default function Charts() {
         ))}
       </div>
 
-      {/* ── Chart area ─────────────────────────────────────────────────────── */}
+      {/* Chart area */}
       <div className="flex-1 flex flex-col min-h-0 p-4 gap-3">
-
-        {/* Tick window controls */}
         <div className="flex items-center gap-2 shrink-0">
           <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest mr-1">Show:</span>
           {[100, 200, 500].map(n => (
@@ -296,7 +324,6 @@ export default function Charts() {
           ))}
         </div>
 
-        {/* Chart */}
         <div className="flex-1 min-h-0 bg-card border border-border rounded-xl p-3 relative">
           {points.length < 2 ? (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
@@ -342,7 +369,7 @@ export default function Charts() {
         </div>
       </div>
 
-      {/* ── Footer ─────────────────────────────────────────────────────────── */}
+      {/* Footer */}
       <div className="flex items-center justify-between px-5 py-2 bg-card border-t border-border shrink-0 flex-wrap gap-2">
         <span className="text-[11px] font-mono font-semibold"
           style={{ color: connOk === true ? GREEN : connOk === false ? RED : YELLOW }}>

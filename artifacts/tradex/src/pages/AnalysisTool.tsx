@@ -3,10 +3,11 @@ import { Info, Settings } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { DERIV_APP_ID } from "@/context/AuthContext";
 
-// Always open a fresh direct browser WS — no server proxy, no auth gate
 const WS_URL          = `wss://ws.binaryws.com/websockets/v3?app_id=${DERIV_APP_ID}`;
-const OPEN_TIMEOUT_MS = 5_000;
+const OPEN_TIMEOUT_MS = 8_000;   // max wait for socket to open
+const HIST_TIMEOUT_MS = 10_000;  // max wait for history response after open
 const RETRY_DELAY_MS  = 3_000;
+const PING_INTERVAL   = 25_000;  // keepalive — Deriv drops connections without it
 
 const SYMBOLS = [
   { label: "Volatility 10 Index",        id: "R_10"    },
@@ -34,53 +35,53 @@ export default function AnalysisTool() {
   const wsRef         = useRef<WebSocket | null>(null);
   const mountRef      = useRef(true);
   const retryRef      = useRef(0);
-  const openTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const openTimerRef  = useRef<ReturnType<typeof setTimeout>  | null>(null);
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout>  | null>(null);
+  const histTimerRef  = useRef<ReturnType<typeof setTimeout>  | null>(null);
+  const pingRef       = useRef<ReturnType<typeof setInterval> | null>(null);
   const symRef        = useRef(selectedSym.id);
   const windowRef     = useRef(tickWindow);
 
   useEffect(() => { windowRef.current = tickWindow; }, [tickWindow]);
 
-  const clearTimers = useCallback(() => {
-    if (openTimerRef.current)  { clearTimeout(openTimerRef.current);  openTimerRef.current  = null; }
-    if (retryTimerRef.current) { clearTimeout(retryTimerRef.current); retryTimerRef.current = null; }
+  // Clear ALL timers and the ping interval in one call
+  const clearAll = useCallback(() => {
+    if (openTimerRef.current)  { clearTimeout(openTimerRef.current);   openTimerRef.current  = null; }
+    if (retryTimerRef.current) { clearTimeout(retryTimerRef.current);  retryTimerRef.current = null; }
+    if (histTimerRef.current)  { clearTimeout(histTimerRef.current);   histTimerRef.current  = null; }
+    if (pingRef.current)       { clearInterval(pingRef.current);       pingRef.current       = null; }
   }, []);
+
+  const scheduleRetry = useCallback((ws: WebSocket, reason: string, connectFn: () => void) => {
+    ws.onclose = null;
+    ws.close();
+    clearAll();
+    if (!mountRef.current) return;
+    retryRef.current++;
+    setConnected(false);
+    setStatusLabel(`${reason} — retrying... (${retryRef.current})`);
+    retryTimerRef.current = setTimeout(connectFn, RETRY_DELAY_MS);
+  }, [clearAll]);
 
   const connect = useCallback(() => {
     if (!mountRef.current) return;
-    clearTimers();
+    clearAll();
+    if (wsRef.current) { wsRef.current.onclose = null; wsRef.current.close(); wsRef.current = null; }
 
-    if (wsRef.current) {
-      wsRef.current.onclose = null;
-      wsRef.current.close();
-      wsRef.current = null;
-    }
-
-    // Always open a fresh browser-direct WebSocket
     const ws = new WebSocket(WS_URL);
     wsRef.current = ws;
 
-    // 5-second open timeout → force retry
+    // ── Bug fix #1: timeout if socket never opens ──────────────────────────
     openTimerRef.current = setTimeout(() => {
       if (!mountRef.current || ws.readyState === WebSocket.OPEN) return;
-      ws.onclose = null;
-      ws.close();
-      retryRef.current++;
-      setConnected(false);
-      setStatusLabel(`Reconnecting... (attempt ${retryRef.current})`);
-      retryTimerRef.current = setTimeout(connect, RETRY_DELAY_MS);
+      scheduleRetry(ws, "Connection timeout", connect);
     }, OPEN_TIMEOUT_MS);
 
     ws.onopen = () => {
       if (!mountRef.current) return;
-      clearTimers();
-      retryRef.current = 0;
-      setConnected(true);
-      setStatusLabel("Live");
+      clearAll(); // clears openTimer
 
-      // Send ticks_history IMMEDIATELY on open — public symbols need no auth
-      // This is the fix: do NOT gate this on authorize — an expired/invalid token
-      // would silently block history from ever being requested
+      // Send ticks_history immediately — public symbols need no auth
       ws.send(JSON.stringify({
         ticks_history: symRef.current,
         count:         1000,
@@ -89,6 +90,17 @@ export default function AnalysisTool() {
         style:         "ticks",
         subscribe:     1,
       }));
+
+      // ── Bug fix #2: timeout if history response never arrives ────────────
+      histTimerRef.current = setTimeout(() => {
+        if (!mountRef.current) return;
+        scheduleRetry(ws, "History timeout", connect);
+      }, HIST_TIMEOUT_MS);
+
+      // ── Bug fix #3: keepalive ping — Deriv drops idle sockets after ~60s ─
+      pingRef.current = setInterval(() => {
+        if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ ping: 1 }));
+      }, PING_INTERVAL);
     };
 
     ws.onmessage = (evt) => {
@@ -96,19 +108,24 @@ export default function AnalysisTool() {
       try {
         const msg = JSON.parse(evt.data);
 
-        // Silently skip errors — do NOT block/retry on WS-level errors like
-        // "invalid symbol" — just log and let the stream continue
+        // ── Bug fix #4: errors now close & retry instead of getting stuck ──
         if (msg.error) {
           console.warn("[AnalysisTool WS]", msg.error.code, msg.error.message);
+          scheduleRetry(ws, `Error: ${msg.error.message}`, connect);
           return;
         }
 
-        // Bulk history → populate digit table immediately
+        if (msg.msg_type === "pong") return; // keepalive response — ignore
+
+        // Bulk history → cancel history timeout, populate digit table
         if (msg.msg_type === "history") {
+          if (histTimerRef.current) { clearTimeout(histTimerRef.current); histTimerRef.current = null; }
           const prices: number[] = msg.history?.prices ?? [];
           const digits = prices.map(lastDigit);
           setHistory(digits.slice(-windowRef.current));
           if (prices.length > 0) setLatestPrice(prices[prices.length - 1]);
+          setConnected(true);
+          setStatusLabel("Live");
           return;
         }
 
@@ -131,15 +148,14 @@ export default function AnalysisTool() {
 
     ws.onclose = () => {
       if (!mountRef.current) return;
-      clearTimers();
+      clearAll();
       setConnected(false);
       retryRef.current++;
-      setStatusLabel(`Reconnecting... (attempt ${retryRef.current})`);
+      setStatusLabel(`Disconnected — reconnecting... (${retryRef.current})`);
       retryTimerRef.current = setTimeout(connect, RETRY_DELAY_MS);
     };
-  }, [clearTimers]);
+  }, [clearAll, scheduleRetry]);
 
-  // Reconnect when symbol changes
   useEffect(() => {
     mountRef.current = true;
     symRef.current   = selectedSym.id;
@@ -149,15 +165,13 @@ export default function AnalysisTool() {
     retryRef.current = 0;
     setStatusLabel("Connecting...");
     connect();
-
     return () => {
       mountRef.current = false;
-      clearTimers();
+      clearAll();
       if (wsRef.current) { wsRef.current.onclose = null; wsRef.current.close(); }
     };
-  }, [selectedSym.id, connect, clearTimers]);
+  }, [selectedSym.id, connect, clearAll]);
 
-  // Trim when window shrinks
   useEffect(() => {
     setHistory(prev => prev.length > tickWindow ? prev.slice(-tickWindow) : prev);
   }, [tickWindow]);
@@ -179,7 +193,7 @@ export default function AnalysisTool() {
   const nonZero    = digitCounts.filter(c => c > 0);
   const minCount   = nonZero.length ? Math.min(...nonZero) : 0;
   const currentDigit = history.length > 0 ? history[history.length - 1] : null;
-  const isRetrying   = statusLabel.startsWith("Reconnecting");
+  const isRetrying   = statusLabel.startsWith("Reconnecting") || statusLabel.startsWith("Disconnected") || statusLabel.startsWith("Error") || statusLabel.startsWith("Connection") || statusLabel.startsWith("History");
 
   const getDigitColor = (i: number, count: number) => {
     if (history.length === 0) return "bg-secondary";
@@ -345,7 +359,7 @@ export default function AnalysisTool() {
                 <span>Recent:</span>
                 <div className="flex gap-1">
                   {history.slice(-8).map((d, i) => (
-                    <div key={i} className={`w-2 h-2 rounded-full ${d < 5 ? "bg-[#EF4444]" : d > 5 ? "bg-[#22C55E]" : "bg-gray-400"}`} />
+                    <div key={i} className={`w-2 h-2 rounded-full ${d < 5 ? "bg-[#EF4444]" : d > 5 ? "bg-[#22C55E]" : "bg-muted-foreground"}`} />
                   ))}
                 </div>
               </div>
