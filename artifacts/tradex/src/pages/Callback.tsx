@@ -1,47 +1,90 @@
 import { useEffect, useState } from "react";
+import { OAUTH_APP_ID } from "@/context/AuthContext";
 
 const TOKEN_KEY    = "deriv_token";
 const ACCOUNTS_KEY = "tradex-deriv-accounts";
 
-function parseCallback() {
-  const params   = new URLSearchParams(window.location.search);
-  const accounts = [];
+interface ParseResult {
+  accounts: { account: string; token: string; currency: string }[];
+  errorReason: string | null;
+}
+
+function parseCallback(): ParseResult {
+  const params    = new URLSearchParams(window.location.search);
+  const accounts  = [];
+  let errorReason: string | null = null;
+
+  if (!params.has("acct1")) {
+    const allKeys = Array.from(params.keys()).join(", ") || "(none)";
+    errorReason = `No account parameters found in the redirect URL. Received params: ${allKeys}. ` +
+      `Expected: acct1, token1, cur1. ` +
+      `Check that App ID ${OAUTH_APP_ID} has redirect URI correctly registered in the Deriv developer console.`;
+    console.error("[TradeX Callback]", errorReason);
+    return { accounts: [], errorReason };
+  }
+
   let i = 1;
   while (params.has(`acct${i}`)) {
     const account  = params.get(`acct${i}`)  || "";
     const token    = params.get(`token${i}`) || "";
     const currency = params.get(`cur${i}`)   || "USD";
-    if (account && token) accounts.push({ account, token, currency });
+
+    if (!account) {
+      console.warn(`[TradeX Callback] acct${i} is empty — skipping`);
+    } else if (!token) {
+      console.warn(`[TradeX Callback] token${i} is empty for account ${account} — skipping`);
+    } else {
+      accounts.push({ account, token, currency });
+    }
     i++;
   }
-  return accounts;
+
+  if (accounts.length === 0) {
+    errorReason = `Account parameters were present but all tokens were empty (received ${i - 1} account entries). ` +
+      `This can happen if Deriv revoked access for App ID ${OAUTH_APP_ID}.`;
+    console.error("[TradeX Callback]", errorReason);
+  }
+
+  return { accounts, errorReason };
 }
 
 export default function Callback() {
-  const [status, setStatus]   = useState<"processing" | "success" | "error">("processing");
-  const [message, setMessage] = useState("Processing your login...");
+  const [status,      setStatus]      = useState<"processing" | "success" | "error">("processing");
+  const [message,     setMessage]     = useState("Processing your login...");
+  const [errorDetail, setErrorDetail] = useState<string | null>(null);
 
   useEffect(() => {
-    const accounts = parseCallback();
+    const { accounts, errorReason } = parseCallback();
 
     if (accounts.length === 0) {
       setStatus("error");
-      setMessage("No account data was received from Deriv. Please try again.");
-      setTimeout(() => { window.location.href = "/"; }, 4000);
+      setMessage("No account data was received from Deriv.");
+      setErrorDetail(errorReason);
       return;
     }
 
-    localStorage.setItem(TOKEN_KEY,    accounts[0].token);
-    localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts));
+    try {
+      localStorage.setItem(TOKEN_KEY,    accounts[0].token);
+      localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts));
+    } catch (e) {
+      console.error("[TradeX Callback] Failed to save tokens to localStorage:", e);
+      setStatus("error");
+      setMessage("Could not save your session. Your browser may be blocking storage.");
+      setErrorDetail(String(e));
+      return;
+    }
 
     const label = accounts.length > 1
       ? `${accounts.length} accounts connected`
       : `${accounts[0].account} (${accounts[0].currency})`;
 
+    console.info("[TradeX Callback] Login successful:", label);
     setStatus("success");
     setMessage(`Welcome back! ${label}`);
     setTimeout(() => { window.location.href = "/"; }, 2000);
   }, []);
+
+  const retry = () => { window.location.href = "/"; };
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-4">
@@ -53,7 +96,7 @@ export default function Callback() {
           <span className="text-[10px] font-bold mt-1 px-1 py-[1px] rounded bg-[#FACC15]/20 text-[#FACC15]">PRO</span>
         </div>
 
-        {/* Icon */}
+        {/* Status icon */}
         <div className="flex justify-center">
           {status === "processing" && (
             <div className="w-16 h-16 rounded-full border-4 border-primary/20 border-t-primary animate-spin" />
@@ -74,29 +117,54 @@ export default function Callback() {
           )}
         </div>
 
-        {/* Text */}
+        {/* Title + message */}
         <div>
           <h1 className="text-xl font-bold text-foreground mb-1">
             {status === "processing" ? "Connecting to Deriv" :
-             status === "success"    ? "Login Successful"   : "Login Failed"}
+             status === "success"    ? "Login Successful"    : "Login Failed"}
           </h1>
           <p className="text-sm text-muted-foreground">{message}</p>
         </div>
 
-        {status !== "error" && (
+        {/* Error detail (collapsible) */}
+        {status === "error" && errorDetail && (
+          <details className="text-left">
+            <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors select-none">
+              Show details
+            </summary>
+            <p className="mt-2 text-[11px] text-muted-foreground bg-secondary border border-border rounded-lg px-3 py-2 leading-relaxed break-words">
+              {errorDetail}
+            </p>
+          </details>
+        )}
+
+        {/* Redirecting indicator */}
+        {status === "success" && (
           <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
             <div className="w-1.5 h-1.5 rounded-full bg-[#22C55E] animate-pulse" />
             Redirecting to TradeX...
           </div>
         )}
 
+        {/* Error actions */}
         {status === "error" && (
-          <button
-            onClick={() => { window.location.href = "/"; }}
-            className="w-full py-2.5 bg-primary hover:bg-primary/90 text-white rounded-lg font-semibold text-sm transition-colors"
-          >
-            Back to TradeX
-          </button>
+          <div className="space-y-2">
+            <button
+              onClick={() => {
+                const url = `https://oauth.deriv.com/oauth2/authorize?app_id=${OAUTH_APP_ID}&l=EN&brand=deriv`;
+                window.location.href = url;
+              }}
+              className="w-full py-2.5 bg-primary hover:bg-primary/90 text-white rounded-lg font-semibold text-sm transition-colors"
+            >
+              Try Logging In Again
+            </button>
+            <button
+              onClick={retry}
+              className="w-full py-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Back to TradeX
+            </button>
+          </div>
         )}
       </div>
     </div>
