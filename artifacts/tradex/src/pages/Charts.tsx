@@ -3,6 +3,7 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer,
 } from "recharts";
+import { useTheme } from "@/components/ThemeProvider";
 import { DERIV_APP_ID } from "@/context/AuthContext";
 
 const WS_URL       = `wss://ws.binaryws.com/websockets/v3?app_id=${DERIV_APP_ID}`;
@@ -11,22 +12,21 @@ const OPEN_TIMEOUT = 5_000;
 const MAX_STORE    = 2_000;
 
 const SYMBOLS = [
-  { id: "R_100",   label: "Volatility 100 Index",       badge: "R_100" },
-  { id: "R_75",    label: "Volatility 75 Index",        badge: "R_75"  },
-  { id: "R_50",    label: "Volatility 50 Index",        badge: "R_50"  },
-  { id: "R_25",    label: "Volatility 25 Index",        badge: "R_25"  },
-  { id: "R_10",    label: "Volatility 10 Index",        badge: "R_10"  },
-  { id: "1HZ100V", label: "Volatility 100 (1s) Index",  badge: "1HZ100V" },
-  { id: "1HZ10V",  label: "Volatility 10 (1s) Index",   badge: "1HZ10V"  },
+  { id: "R_100",   label: "Volatility 100 Index"      },
+  { id: "R_75",    label: "Volatility 75 Index"       },
+  { id: "R_50",    label: "Volatility 50 Index"       },
+  { id: "R_25",    label: "Volatility 25 Index"       },
+  { id: "R_10",    label: "Volatility 10 Index"       },
+  { id: "1HZ100V", label: "Volatility 100 (1s) Index" },
+  { id: "1HZ10V",  label: "Volatility 10 (1s) Index"  },
 ];
 
-type Tick = { epoch: number; quote: number };
+type Tick  = { epoch: number; quote: number };
 type Point = { time: string; value: number };
 
 function fmtTime(epoch: number) {
   return new Date(epoch * 1000).toUTCString().slice(17, 25);
 }
-
 function utcNow() {
   return new Date().toUTCString().slice(17, 25) + " UTC";
 }
@@ -34,44 +34,40 @@ function utcNow() {
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (!active || !payload?.length) return null;
   return (
-    <div style={{
-      background: "#10141c", border: "1px solid #1e2430", borderRadius: 6,
-      padding: "8px 12px", fontFamily: "monospace", fontSize: 11,
-    }}>
-      <div style={{ color: "#8892a4", marginBottom: 2 }}>{label}</div>
-      <div style={{ color: "#e2e8f0", fontWeight: 600 }}>
-        {Number(payload[0].value).toFixed(3)}
-      </div>
+    <div className="bg-card border border-border rounded-lg px-3 py-2 text-xs font-mono shadow-lg">
+      <div className="text-muted-foreground mb-1">{label}</div>
+      <div className="text-foreground font-semibold">{Number(payload[0].value).toFixed(3)}</div>
     </div>
   );
 };
 
 export default function Charts() {
-  const [sym, setSym]           = useState(SYMBOLS[0]);
-  const [points, setPoints]     = useState<Point[]>([]);
-  const [allTicks, setAllTicks] = useState<Tick[]>([]);
-  const [maxVisible, setMaxVisible] = useState(100);
-  const [price, setPrice]       = useState<number | null>(null);
-  const [prevPrice, setPrevPrice] = useState<number | null>(null);
-  const [openPrice, setOpenPrice] = useState<number | null>(null);
-  const [high, setHigh]         = useState<number>(-Infinity);
-  const [low, setLow]           = useState<number>(Infinity);
-  const [tickCount, setTickCount] = useState(0);
-  const [connStatus, setConnStatus] = useState("Connecting…");
-  const [connError, setConnError]   = useState(false);
-  const [lastTickTime, setLastTickTime] = useState("--");
-  const [utcTime, setUtcTime]   = useState(utcNow);
-  const [flashUp, setFlashUp]   = useState(false);
-  const [flashDown, setFlashDown] = useState(false);
+  const { theme } = useTheme();
+  const isDark    = theme === "dark";
 
-  const wsRef        = useRef<WebSocket | null>(null);
-  const mountRef     = useRef(true);
-  const retryRef     = useRef(0);
-  const openTimer    = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const retryTimer   = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const symRef       = useRef(sym.id);
-  const allTicksRef  = useRef<Tick[]>([]);
-  const maxRef       = useRef(maxVisible);
+  const [sym, setSym]               = useState(SYMBOLS[0]);
+  const [points, setPoints]         = useState<Point[]>([]);
+  const [allTicks, setAllTicks]     = useState<Tick[]>([]);
+  const [maxVisible, setMaxVisible] = useState(100);
+  const [price, setPrice]           = useState<number | null>(null);
+  const [openPrice, setOpenPrice]   = useState<number | null>(null);
+  const [high, setHigh]             = useState<number>(-Infinity);
+  const [low, setLow]               = useState<number>(Infinity);
+  const [tickCount, setTickCount]   = useState(0);
+  const [connStatus, setConnStatus] = useState("Connecting…");
+  const [connOk, setConnOk]         = useState<boolean | null>(null);
+  const [lastTickTime, setLastTickTime] = useState("--");
+  const [utcTime, setUtcTime]       = useState(utcNow);
+  const [flashDir, setFlashDir]     = useState<"up"|"down"|null>(null);
+
+  const wsRef       = useRef<WebSocket | null>(null);
+  const mountRef    = useRef(true);
+  const retryRef    = useRef(0);
+  const openTimer   = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const retryTimer  = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const symRef      = useRef(sym.id);
+  const allTicksRef = useRef<Tick[]>([]);
+  const maxRef      = useRef(maxVisible);
 
   // UTC clock
   useEffect(() => {
@@ -79,12 +75,10 @@ export default function Charts() {
     return () => clearInterval(id);
   }, []);
 
-  // Keep refs in sync
   useEffect(() => { maxRef.current = maxVisible; }, [maxVisible]);
 
   const buildPoints = useCallback((ticks: Tick[], max: number): Point[] =>
-    ticks.slice(-max).map(t => ({ time: fmtTime(t.epoch), value: t.quote })),
-  []);
+    ticks.slice(-max).map(t => ({ time: fmtTime(t.epoch), value: t.quote })), []);
 
   const clearTimers = useCallback(() => {
     if (openTimer.current)  { clearTimeout(openTimer.current);  openTimer.current  = null; }
@@ -103,7 +97,7 @@ export default function Charts() {
       if (!mountRef.current || ws.readyState === WebSocket.OPEN) return;
       ws.onclose = null; ws.close();
       retryRef.current++;
-      setConnError(true);
+      setConnOk(false);
       setConnStatus(`Reconnecting… (attempt ${retryRef.current})`);
       retryTimer.current = setTimeout(connect, RETRY_DELAY);
     }, OPEN_TIMEOUT);
@@ -112,10 +106,8 @@ export default function Charts() {
       if (!mountRef.current) return;
       clearTimers();
       retryRef.current = 0;
-      setConnStatus("Connected");
-      setConnError(false);
-
-      // Step 1 — fetch history (no subscribe yet)
+      setConnOk(true);
+      setConnStatus("Live");
       ws.send(JSON.stringify({
         ticks_history: symRef.current,
         adjust_start_time: 1,
@@ -130,13 +122,8 @@ export default function Charts() {
       if (!mountRef.current) return;
       try {
         const msg = JSON.parse(evt.data);
-        if (msg.error) {
-          setConnError(true);
-          setConnStatus(msg.error.message);
-          return;
-        }
+        if (msg.error) { setConnOk(false); setConnStatus(msg.error.message); return; }
 
-        // Step 2 — history loaded → subscribe to live ticks
         if (msg.msg_type === "history") {
           const { prices, times } = msg.history as { prices: number[]; times: number[] };
           const ticks: Tick[] = times.map((t, i) => ({ epoch: t, quote: prices[i] }));
@@ -144,17 +131,12 @@ export default function Charts() {
           setAllTicks(ticks);
           setPoints(buildPoints(ticks, maxRef.current));
           setTickCount(ticks.length);
-
           if (prices.length > 0) {
-            const first = prices[0];
-            const last  = prices[prices.length - 1];
-            setOpenPrice(first);
+            setOpenPrice(prices[0]);
+            setPrice(prices[prices.length - 1]);
             setHigh(Math.max(...prices));
             setLow(Math.min(...prices));
-            setPrice(last);
           }
-
-          // Step 3 — subscribe live ticks
           ws.send(JSON.stringify({ ticks: symRef.current, subscribe: 1 }));
           return;
         }
@@ -162,19 +144,18 @@ export default function Charts() {
         if (msg.msg_type === "tick") {
           const { quote, epoch } = msg.tick as { quote: number; epoch: number };
           setPrice(prev => {
-            const dir = prev !== null ? (quote >= prev ? "up" : "down") : null;
-            setPrevPrice(prev);
-            if (dir === "up")   { setFlashUp(true);   setTimeout(() => setFlashUp(false),   420); }
-            if (dir === "down") { setFlashDown(true);  setTimeout(() => setFlashDown(false), 420); }
+            if (prev !== null) {
+              const dir = quote >= prev ? "up" : "down";
+              setFlashDir(dir);
+              setTimeout(() => setFlashDir(null), 420);
+            }
             return quote;
           });
           setHigh(h => Math.max(h, quote));
           setLow(l  => Math.min(l, quote));
           setTickCount(c => c + 1);
           setLastTickTime(fmtTime(epoch));
-
-          const newTick: Tick = { epoch, quote };
-          const updated = [...allTicksRef.current, newTick];
+          const updated = [...allTicksRef.current, { epoch, quote }];
           if (updated.length > MAX_STORE) updated.shift();
           allTicksRef.current = updated;
           setAllTicks(updated);
@@ -183,34 +164,25 @@ export default function Charts() {
       } catch (_) {}
     };
 
-    ws.onerror = () => { if (mountRef.current) { setConnError(true); setConnStatus("Connection error — retrying…"); } };
+    ws.onerror = () => { if (mountRef.current) { setConnOk(false); } };
     ws.onclose = () => {
       if (!mountRef.current) return;
       clearTimers();
-      setConnError(true);
+      setConnOk(false);
       retryRef.current++;
       setConnStatus(`Disconnected — reconnecting… (attempt ${retryRef.current})`);
       retryTimer.current = setTimeout(connect, RETRY_DELAY);
     };
   }, [clearTimers, buildPoints]);
 
-  // Reconnect when symbol changes
   useEffect(() => {
     mountRef.current = true;
     symRef.current   = sym.id;
     allTicksRef.current = [];
-    setAllTicks([]);
-    setPoints([]);
-    setPrice(null);
-    setPrevPrice(null);
-    setOpenPrice(null);
-    setHigh(-Infinity);
-    setLow(Infinity);
-    setTickCount(0);
-    setConnError(false);
-    retryRef.current = 0;
-    setConnStatus("Connecting…");
-    setLastTickTime("--");
+    setAllTicks([]); setPoints([]); setPrice(null); setOpenPrice(null);
+    setHigh(-Infinity); setLow(Infinity); setTickCount(0);
+    setConnOk(null); retryRef.current = 0;
+    setConnStatus("Connecting…"); setLastTickTime("--");
     connect();
     return () => {
       mountRef.current = false;
@@ -219,176 +191,149 @@ export default function Charts() {
     };
   }, [sym.id, connect, clearTimers]);
 
-  // Recompute visible slice when maxVisible changes
   useEffect(() => {
     setPoints(buildPoints(allTicksRef.current, maxVisible));
   }, [maxVisible, buildPoints]);
 
+  // ── Derived display values ─────────────────────────────────────────────────
   const priceChange = price !== null && openPrice !== null ? price - openPrice : null;
-  const pricePct    = priceChange !== null && openPrice ? ((priceChange / openPrice) * 100).toFixed(2) : null;
-  const priceColor  = flashUp ? "#00e5a0" : flashDown ? "#ff4d6a" : "#e2e8f0";
+  const pricePct    = priceChange !== null && openPrice
+    ? ((priceChange / openPrice) * 100).toFixed(2) : null;
+
+  // TradeX brand colors — only these three for semantic states
+  const GREEN   = "#22C55E";
+  const RED     = "#EF4444";
+  const YELLOW  = "#FACC15";
+  const PRIMARY = "#3B82F6";
+
+  const dotColor   = connOk === true ? GREEN : connOk === false ? RED : YELLOW;
+  const priceColor = flashDir === "up" ? GREEN : flashDir === "down" ? RED : "var(--color-foreground)";
+  const changeColor = priceChange !== null ? (priceChange >= 0 ? GREEN : RED) : "var(--color-muted-foreground)";
+
+  // Recharts theme-aware colors
+  const gridColor   = isDark ? "hsl(210 24% 16%)"  : "hsl(220 13% 91%)";
+  const axisColor   = isDark ? "hsl(218 11% 65%)"  : "hsl(215 28% 34%)";
 
   const yMin = points.length ? Math.min(...points.map(p => p.value)) * 0.9999 : undefined;
   const yMax = points.length ? Math.max(...points.map(p => p.value)) * 1.0001 : undefined;
 
-  return (
-    <div style={{
-      display: "flex", flexDirection: "column",
-      height: "calc(100vh - 120px)",
-      background: "#0a0c10", color: "#e2e8f0",
-      fontFamily: "'JetBrains Mono', monospace",
-      overflow: "hidden",
-    }}>
+  const statItems = [
+    { label: "HIGH",  value: high   > -Infinity ? high.toFixed(3)  : "--" },
+    { label: "LOW",   value: low    < Infinity  ? low.toFixed(3)   : "--" },
+    { label: "OPEN",  value: openPrice !== null  ? openPrice.toFixed(3) : "--" },
+    { label: "TICKS", value: tickCount.toString() },
+  ];
 
-      {/* ── Header bar ────────────────────────────────────────────────── */}
-      <div style={{
-        display: "flex", alignItems: "center", justifyContent: "space-between",
-        padding: "10px 20px", borderBottom: "1px solid #1e2430", background: "#10141c",
-        flexShrink: 0, flexWrap: "wrap", gap: 8,
-      }}>
-        {/* Symbol selector */}
+  return (
+    <div className="flex flex-col bg-background"
+      style={{ height: "calc(100vh - 120px)", overflow: "hidden" }}>
+
+      {/* ── Header ─────────────────────────────────────────────────────────── */}
+      <div className="flex items-center justify-between gap-3 px-5 py-2.5 bg-card border-b border-border shrink-0 flex-wrap">
         <select
           value={sym.id}
           onChange={e => setSym(SYMBOLS.find(s => s.id === e.target.value) || SYMBOLS[0])}
-          style={{
-            background: "#1a2235", border: "1px solid #1e2430", borderRadius: 4,
-            color: "#e2e8f0", fontFamily: "monospace", fontSize: "0.75rem",
-            padding: "4px 8px", cursor: "pointer",
-          }}
+          className="bg-background border border-border rounded-md text-foreground text-xs px-3 py-1.5 focus:outline-none focus:border-primary cursor-pointer"
         >
           {SYMBOLS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
         </select>
 
-        {/* Instrument badge */}
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <span style={{
-            width: 8, height: 8, borderRadius: "50%",
-            background: connError ? "#ff4d6a" : "#00e5a0",
-            boxShadow: `0 0 8px ${connError ? "#ff4d6a" : "#00e5a0"}`,
-            display: "inline-block", animation: "pulseDot 1.5s ease-in-out infinite",
-          }}/>
-          <span style={{ fontWeight: 700, fontSize: "0.9rem" }}>{sym.label}</span>
-          <span style={{
-            background: "#1a2235", border: "1px solid #1e2430", borderRadius: 4,
-            padding: "2px 8px", fontSize: "0.6rem", color: "#8892a4", letterSpacing: 1,
-          }}>{sym.badge} · TICK</span>
+        <div className="flex items-center gap-2.5">
+          <span className="w-2 h-2 rounded-full shrink-0 transition-colors"
+            style={{ background: dotColor, boxShadow: `0 0 6px ${dotColor}` }}/>
+          <span className="text-sm font-bold text-foreground">{sym.label}</span>
+          <span className="text-[10px] font-mono text-muted-foreground bg-secondary px-2 py-0.5 rounded border border-border">
+            {sym.id} · TICK
+          </span>
         </div>
 
-        <span style={{ fontSize: "0.65rem", color: "#8892a4" }}>{utcTime}</span>
+        <span className="text-xs font-mono text-muted-foreground">{utcTime}</span>
       </div>
 
-      {/* ── Price bar ─────────────────────────────────────────────────── */}
-      <div style={{
-        display: "flex", alignItems: "center", gap: 20,
-        padding: "8px 20px", background: "#10141c",
-        borderBottom: "1px solid #1e2430", flexShrink: 0, flexWrap: "wrap",
-      }}>
-        {/* Live price */}
-        <span style={{
-          fontFamily: "'Syne', 'JetBrains Mono', monospace",
-          fontSize: "1.8rem", fontWeight: 800, letterSpacing: -1,
-          color: priceColor, transition: "color 0.3s",
-        }}>
+      {/* ── Price bar ──────────────────────────────────────────────────────── */}
+      <div className="flex items-center gap-5 px-5 py-2 bg-card border-b border-border shrink-0 flex-wrap">
+        {/* Price */}
+        <span className="text-3xl font-bold font-mono tracking-tight transition-colors duration-200"
+          style={{ color: priceColor }}>
           {price !== null ? price.toFixed(3) : "---.---"}
         </span>
 
         {/* Change badge */}
         {priceChange !== null && pricePct !== null && (
-          <span style={{
-            fontSize: "0.75rem", padding: "3px 8px", borderRadius: 4, fontWeight: 600,
-            background: priceChange >= 0 ? "rgba(0,229,160,0.1)" : "rgba(255,77,106,0.1)",
-            color: priceChange >= 0 ? "#00e5a0" : "#ff4d6a",
-          }}>
+          <span className="text-xs font-semibold font-mono px-2 py-1 rounded"
+            style={{
+              background: priceChange >= 0 ? "rgba(34,197,94,0.1)" : "rgba(239,68,68,0.1)",
+              color: changeColor,
+            }}>
             {priceChange >= 0 ? "+" : ""}{priceChange.toFixed(3)} ({priceChange >= 0 ? "+" : ""}{pricePct}%)
           </span>
         )}
 
         {/* Stats */}
-        {[
-          { label: "HIGH",  value: high   > -Infinity ? high.toFixed(3)  : "--" },
-          { label: "LOW",   value: low    < Infinity  ? low.toFixed(3)   : "--" },
-          { label: "OPEN",  value: openPrice !== null  ? openPrice.toFixed(3) : "--" },
-          { label: "TICKS", value: tickCount.toString() },
-        ].map(s => (
-          <div key={s.label} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-            <span style={{ fontSize: "0.55rem", color: "#8892a4", letterSpacing: 1, textTransform: "uppercase" }}>{s.label}</span>
-            <span style={{ fontSize: "0.8rem", color: "#e2e8f0", fontFamily: "monospace" }}>{s.value}</span>
+        {statItems.map(s => (
+          <div key={s.label} className="flex flex-col gap-0.5">
+            <span className="text-[10px] font-mono text-muted-foreground tracking-widest uppercase">{s.label}</span>
+            <span className="text-sm font-mono text-foreground">{s.value}</span>
           </div>
         ))}
       </div>
 
-      {/* ── Chart area ────────────────────────────────────────────────── */}
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", padding: "14px 20px", gap: 10, minHeight: 0 }}>
+      {/* ── Chart area ─────────────────────────────────────────────────────── */}
+      <div className="flex-1 flex flex-col min-h-0 p-4 gap-3">
 
-        {/* Controls */}
-        <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-          <span style={{ fontSize: "0.6rem", color: "#8892a4", marginRight: 4, letterSpacing: 1 }}>SHOW:</span>
+        {/* Tick window controls */}
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest mr-1">Show:</span>
           {[100, 200, 500].map(n => (
-            <button key={n} onClick={() => setMaxVisible(n)} style={{
-              background: maxVisible === n ? "rgba(0,229,160,0.05)" : "#10141c",
-              border: `1px solid ${maxVisible === n ? "#00e5a0" : "#1e2430"}`,
-              borderRadius: 4,
-              color: maxVisible === n ? "#00e5a0" : "#8892a4",
-              fontFamily: "monospace", fontSize: "0.7rem",
-              padding: "3px 10px", cursor: "pointer", transition: "all 0.15s",
-            }}>
+            <button key={n} onClick={() => setMaxVisible(n)}
+              className={`px-3 py-1 text-xs font-mono rounded border transition-colors ${
+                maxVisible === n
+                  ? "border-primary text-primary bg-primary/5"
+                  : "border-border text-muted-foreground bg-card hover:border-primary/50 hover:text-foreground"
+              }`}>
               {n}
             </button>
           ))}
         </div>
 
         {/* Chart */}
-        <div style={{
-          flex: 1, minHeight: 0,
-          background: "#10141c", border: "1px solid #1e2430",
-          borderRadius: 8, padding: "12px 8px 8px 8px",
-          position: "relative",
-        }}>
+        <div className="flex-1 min-h-0 bg-card border border-border rounded-xl p-3 relative">
           {points.length < 2 ? (
-            <div style={{
-              position: "absolute", inset: 0,
-              display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-              gap: 12,
-            }}>
-              <div style={{
-                width: 32, height: 32, borderRadius: "50%",
-                border: "3px solid rgba(0,229,160,0.2)",
-                borderTop: "3px solid #00e5a0",
-                animation: "spin 1s linear infinite",
-              }}/>
-              <span style={{ fontSize: "0.7rem", color: connError ? "#ff4d6a" : "#8892a4" }}>
-                {connStatus}
-              </span>
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
+              <div className={`w-8 h-8 rounded-full border-[3px] animate-spin ${
+                connOk === false
+                  ? "border-[#EF4444]/20 border-t-[#EF4444]"
+                  : "border-primary/20 border-t-primary"
+              }`}/>
+              <span className="text-xs font-mono text-muted-foreground">{connStatus}</span>
             </div>
           ) : (
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={points} margin={{ top: 4, right: 56, left: 0, bottom: 0 }}>
+              <AreaChart data={points} margin={{ top: 4, right: 60, left: 0, bottom: 0 }}>
                 <defs>
-                  <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%"   stopColor="#00e5a0" stopOpacity={0.18}/>
-                    <stop offset="100%" stopColor="#00e5a0" stopOpacity={0}/>
+                  <linearGradient id="txChartGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%"   stopColor={PRIMARY} stopOpacity={0.2}/>
+                    <stop offset="100%" stopColor={PRIMARY} stopOpacity={0}/>
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1e2430" vertical={false}/>
+                <CartesianGrid strokeDasharray="3 3" stroke={gridColor} vertical={false}/>
                 <XAxis dataKey="time"
-                  tick={{ fill: "#4a5568", fontSize: 9, fontFamily: "monospace" }}
+                  tick={{ fill: axisColor, fontSize: 9, fontFamily: "monospace" }}
                   tickLine={false} axisLine={false}
                   interval="preserveStartEnd"
                 />
-                <YAxis
-                  orientation="right"
+                <YAxis orientation="right"
                   domain={[yMin ?? "auto", yMax ?? "auto"]}
-                  tick={{ fill: "#8892a4", fontSize: 9, fontFamily: "monospace" }}
+                  tick={{ fill: axisColor, fontSize: 9, fontFamily: "monospace" }}
                   tickLine={false} axisLine={false}
                   tickFormatter={(v: number) => v.toFixed(2)}
-                  width={60}
+                  width={62}
                 />
                 <Tooltip content={<CustomTooltip/>}/>
-                <Area
-                  type="monotone" dataKey="value"
-                  stroke="#00e5a0" strokeWidth={1.5}
-                  fill="url(#chartGrad)"
-                  dot={false} activeDot={{ r: 3, fill: "#00e5a0" }}
+                <Area type="monotone" dataKey="value"
+                  stroke={PRIMARY} strokeWidth={1.5}
+                  fill="url(#txChartGrad)"
+                  dot={false} activeDot={{ r: 3, fill: PRIMARY }}
                   isAnimationActive={false}
                 />
               </AreaChart>
@@ -397,22 +342,19 @@ export default function Charts() {
         </div>
       </div>
 
-      {/* ── Footer ────────────────────────────────────────────────────── */}
-      <div style={{
-        padding: "6px 20px", borderTop: "1px solid #1e2430",
-        display: "flex", justifyContent: "space-between", alignItems: "center",
-        fontSize: "0.62rem", color: "#4a5568", flexShrink: 0, background: "#10141c",
-        flexWrap: "wrap", gap: 6,
-      }}>
-        <span style={{ color: connError ? "#ff4d6a" : "#00e5a0" }}>{connStatus}</span>
-        <span>Powered by Deriv WebSocket API · app_id {DERIV_APP_ID}</span>
-        <span>Last tick: {lastTickTime}</span>
+      {/* ── Footer ─────────────────────────────────────────────────────────── */}
+      <div className="flex items-center justify-between px-5 py-2 bg-card border-t border-border shrink-0 flex-wrap gap-2">
+        <span className="text-[11px] font-mono font-semibold"
+          style={{ color: connOk === true ? GREEN : connOk === false ? RED : YELLOW }}>
+          {connStatus}
+        </span>
+        <span className="text-[11px] font-mono text-muted-foreground">
+          Powered by Deriv WebSocket API
+        </span>
+        <span className="text-[11px] font-mono text-muted-foreground">
+          Last tick: {lastTickTime}
+        </span>
       </div>
-
-      <style>{`
-        @keyframes pulseDot { 0%,100%{opacity:1} 50%{opacity:0.3} }
-        @keyframes spin { to { transform: rotate(360deg); } }
-      `}</style>
     </div>
   );
 }
