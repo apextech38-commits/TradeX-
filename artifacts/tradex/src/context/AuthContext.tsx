@@ -3,7 +3,7 @@ import {
   useRef, useCallback, ReactNode
 } from "react";
 
-export const DERIV_APP_ID = "339nn77Xa7qUHK0CbknRG";
+export const DERIV_APP_ID = "339IyLjCcUmBEXEzG6tsS";
 const WS_URL = `wss://ws.binaryws.com/websockets/v3?app_id=${DERIV_APP_ID}`;
 const OAUTH_URL = `https://oauth.deriv.com/oauth2/authorize?app_id=${DERIV_APP_ID}&l=EN&brand=deriv`;
 const TOKEN_KEY = "deriv_token";

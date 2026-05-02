@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from "react";
+import { DERIV_APP_ID } from "../context/AuthContext";
 import { X, Radio } from "lucide-react";
 
 const MARKETS = [
@@ -111,7 +112,7 @@ export default function AIScanner() {
 
     closeWs();
 
-    const ws = new WebSocket("wss://ws.binaryws.com/websockets/v3?app_id=339nn77Xa7qUHK0CbknRG");
+    const ws = new WebSocket(`wss://ws.binaryws.com/websockets/v3?app_id=${DERIV_APP_ID}`);
     wsRef.current = ws;
 
     const count = Math.min(parseInt(ticks) || 500, 2000);
