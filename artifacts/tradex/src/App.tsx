@@ -38,9 +38,11 @@ function AppContent() {
     return () => window.removeEventListener("tradex:navigate", handler);
   }, []);
 
-  // Detect OAuth callback: either /callback path OR any path with acct1 query param
-  const _search = new URLSearchParams(window.location.search);
-  const isCallback = window.location.pathname.endsWith("/callback") || _search.has("acct1");
+  // Detect OAuth callback: /callback path (with optional trailing slash)
+  // OR any path that contains the acct1 query param Deriv appends after OAuth.
+  const _pathname = window.location.pathname.replace(/\/$/, "");
+  const _search   = new URLSearchParams(window.location.search);
+  const isCallback = _pathname.endsWith("/callback") || _search.has("acct1");
   if (isCallback) return <Callback />;
 
   if (loading) {

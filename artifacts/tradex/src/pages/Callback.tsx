@@ -1,8 +1,15 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { OAUTH_APP_ID } from "@/context/AuthContext";
 
 const TOKEN_KEY    = "deriv_token";
 const ACCOUNTS_KEY = "tradex-deriv-accounts";
+
+// Build the OAuth URL identically to AuthContext so the retry flow always
+// redirects back to the correct callback, even across environments.
+function buildOAuthUrl(): string {
+  const redirectUri = encodeURIComponent(`${window.location.origin}/callback`);
+  return `https://oauth.deriv.com/oauth2/authorize?app_id=${OAUTH_APP_ID}&l=EN&brand=deriv&redirect_uri=${redirectUri}`;
+}
 
 interface ParseResult {
   accounts: { account: string; token: string; currency: string }[];
@@ -48,10 +55,17 @@ function parseCallback(): ParseResult {
   return { accounts, errorReason };
 }
 
+const BASE = import.meta.env.BASE_URL || "/";
+
+function goHome() {
+  window.location.replace(BASE);
+}
+
 export default function Callback() {
   const [status,      setStatus]      = useState<"processing" | "success" | "error">("processing");
   const [message,     setMessage]     = useState("Processing your login...");
   const [errorDetail, setErrorDetail] = useState<string | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const { accounts, errorReason } = parseCallback();
@@ -74,6 +88,12 @@ export default function Callback() {
       return;
     }
 
+    // Scrub OAuth tokens from the URL immediately so they are never
+    // visible in the address bar or browser history after this point.
+    try {
+      window.history.replaceState(null, "", BASE);
+    } catch (_) {}
+
     const label = accounts.length > 1
       ? `${accounts.length} accounts connected`
       : `${accounts[0].account} (${accounts[0].currency})`;
@@ -81,10 +101,19 @@ export default function Callback() {
     console.info("[TradeX Callback] Login successful:", label);
     setStatus("success");
     setMessage(`Welcome back! ${label}`);
-    setTimeout(() => { window.location.href = "/"; }, 2000);
+
+    // Use replace() so the callback page is removed from history — the
+    // user's Back button will not loop them through the OAuth flow again.
+    timerRef.current = setTimeout(goHome, 1500);
+
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
   }, []);
 
-  const retry = () => { window.location.href = "/"; };
+  const handleRetryLogin = () => {
+    window.location.href = buildOAuthUrl();
+  };
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-4">
@@ -150,16 +179,13 @@ export default function Callback() {
         {status === "error" && (
           <div className="space-y-2">
             <button
-              onClick={() => {
-                const url = `https://oauth.deriv.com/oauth2/authorize?app_id=${OAUTH_APP_ID}&l=EN&brand=deriv`;
-                window.location.href = url;
-              }}
+              onClick={handleRetryLogin}
               className="w-full py-2.5 bg-primary hover:bg-primary/90 text-white rounded-lg font-semibold text-sm transition-colors"
             >
               Try Logging In Again
             </button>
             <button
-              onClick={retry}
+              onClick={goHome}
               className="w-full py-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
             >
               Back to TradeX
