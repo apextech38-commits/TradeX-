@@ -195,12 +195,20 @@ export default function AnalysisTool() {
   const currentDigit = history.length > 0 ? history[history.length - 1] : null;
   const isRetrying   = statusLabel.startsWith("Reconnecting") || statusLabel.startsWith("Disconnected") || statusLabel.startsWith("Error") || statusLabel.startsWith("Connection") || statusLabel.startsWith("History");
 
-  const getDigitColor = (i: number, count: number) => {
-    if (history.length === 0) return "bg-secondary";
-    if (i === currentDigit)   return "bg-primary";
-    if (count === maxCount)   return "bg-[#EF4444]";
-    if (count === minCount)   return "bg-[#F59E0B]";
-    return "bg-secondary";
+  // Rank counts for colour assignment
+  const sortedUniqueCounts = [...new Set(digitCounts)].sort((a, b) => a - b).filter(c => c > 0);
+  const secondMin = sortedUniqueCounts[1] ?? null;
+  const sortedDesc = [...new Set(digitCounts)].sort((a, b) => b - a);
+  const secondMax = sortedDesc[1] ?? null;
+
+  const getDigitStyle = (i: number, count: number): { circle: string; text: string } => {
+    if (history.length === 0) return { circle: "border border-border bg-secondary/50", text: "text-muted-foreground" };
+    if (i === currentDigit)   return { circle: "border-2 border-primary bg-transparent ring-2 ring-primary/20", text: "text-primary" };
+    if (count === maxCount)   return { circle: "bg-[#22C55E]", text: "text-white" };
+    if (count === minCount && minCount > 0) return { circle: "bg-[#EF4444]", text: "text-white" };
+    if (secondMax !== null && count === secondMax) return { circle: "bg-[#3B82F6]", text: "text-white" };
+    if (secondMin !== null && count === secondMin) return { circle: "bg-[#F97316]", text: "text-white" };
+    return { circle: "border border-border bg-background", text: "text-foreground" };
   };
 
   return (
@@ -272,40 +280,71 @@ export default function AnalysisTool() {
         {/* Right — Stats */}
         <div className="lg:col-span-2 space-y-6">
           {/* Digit Distribution */}
-          <div className="bg-card border border-border rounded-xl p-6 shadow-sm">
-            <div className="flex justify-between items-center mb-5">
-              <h3 className="text-base font-semibold text-foreground">
-                Digit Distribution
-                <span className="ml-2 text-xs font-normal text-muted-foreground">({history.length} ticks)</span>
+          <div className="bg-card border border-border rounded-xl p-4 md:p-6 shadow-sm">
+            <div className="flex justify-between items-center mb-1">
+              <h3 className="text-sm font-semibold text-foreground">
+                Last {tickWindow} ticks digit distribution
               </h3>
-              <div className="flex items-center gap-2">
-                <label className="text-xs text-muted-foreground">Window:</label>
-                <input
-                  type="number"
-                  value={tickWindow}
-                  onChange={e => setTickWindow(Math.max(10, Number(e.target.value)))}
-                  className="w-20 bg-background border border-border rounded px-2 py-1 text-sm text-foreground focus:outline-none focus:border-primary"
-                />
-              </div>
+              <span className="text-xs text-muted-foreground font-mono">{history.length}/{tickWindow}</span>
+            </div>
+            <div className="flex items-center gap-2 mb-4">
+              <label className="text-xs text-muted-foreground">Ticks window:</label>
+              <input
+                type="number"
+                value={tickWindow}
+                onChange={e => setTickWindow(Math.max(50, Math.min(5000, Number(e.target.value))))}
+                className="w-20 bg-background border border-border rounded px-2 py-1 text-xs text-foreground focus:outline-none focus:border-primary"
+              />
+              <span className="text-xs text-muted-foreground">(50–5000)</span>
             </div>
 
-            <div className="flex justify-between gap-1 md:gap-2">
+            {/* Digit circles row */}
+            <div className="flex justify-between items-end gap-0.5 md:gap-1">
               {digitCounts.map((count, i) => {
-                const pct = ((count / total) * 100).toFixed(1);
+                const pct  = ((count / total) * 100).toFixed(1);
+                const { circle, text } = getDigitStyle(i, count);
+                const isCurrent = i === currentDigit;
+                const pctColor  = count === maxCount   ? "text-[#22C55E]"
+                                : count === minCount && minCount > 0 ? "text-[#EF4444]"
+                                : isCurrent            ? "text-primary"
+                                : "text-muted-foreground";
                 return (
-                  <div key={i} className="flex flex-col items-center flex-1">
-                    <div className="text-base font-bold text-foreground mb-1">{i}</div>
-                    <div className="text-[10px] text-muted-foreground mb-2">{pct}%</div>
-                    <div className={`w-4 h-4 md:w-5 md:h-5 rounded-full transition-colors duration-300 ${getDigitColor(i, count)}`} />
+                  <div key={i} className="flex flex-col items-center gap-0.5 flex-1 min-w-0">
+                    {/* Caret above current digit */}
+                    <div className="h-4 flex items-end justify-center w-full">
+                      {isCurrent && (
+                        <svg width="12" height="8" viewBox="0 0 12 8" fill="none">
+                          <path d="M6 8L0 0H12L6 8Z" fill="#3B82F6"/>
+                        </svg>
+                      )}
+                    </div>
+
+                    {/* Circle */}
+                    <div className={`w-9 h-9 sm:w-11 sm:h-11 md:w-13 md:h-13 rounded-full flex items-center justify-center transition-all duration-300 ${circle}`}
+                         style={{ width: "clamp(32px,9vw,56px)", height: "clamp(32px,9vw,56px)" }}>
+                      <span className={`font-bold transition-colors duration-300 ${text}`}
+                            style={{ fontSize: "clamp(13px,3.5vw,20px)" }}>
+                        {i}
+                      </span>
+                    </div>
+
+                    {/* Percentage */}
+                    <span className={`font-semibold transition-colors duration-300 ${pctColor}`}
+                          style={{ fontSize: "clamp(9px,2.2vw,12px)" }}>
+                      {pct}%
+                    </span>
                   </div>
                 );
               })}
             </div>
 
-            <div className="mt-4 flex gap-3 text-[11px] text-muted-foreground">
-              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-primary inline-block" /> Current</span>
-              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-[#EF4444] inline-block" /> Highest</span>
-              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-[#F59E0B] inline-block" /> Lowest</span>
+            {/* Legend */}
+            <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-muted-foreground">
+              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-[#22C55E] inline-block" /> Highest</span>
+              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-[#3B82F6] inline-block" /> 2nd Highest</span>
+              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-[#F97316] inline-block" /> 2nd Lowest</span>
+              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-[#EF4444] inline-block" /> Lowest</span>
+              <span className="flex items-center gap-1 border border-primary rounded-full px-1">▲ Current</span>
             </div>
           </div>
 
