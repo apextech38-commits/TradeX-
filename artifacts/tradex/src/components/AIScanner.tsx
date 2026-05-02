@@ -2,6 +2,8 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { DERIV_APP_ID } from "../context/AuthContext";
 import { X, Radio } from "lucide-react";
 
+const WS_URL = `wss://ws.binaryws.com/websockets/v3?app_id=${DERIV_APP_ID}`;
+
 const MARKETS = [
   { symbol: "R_10",     name: "Volatility 10 Index" },
   { symbol: "R_25",     name: "Volatility 25 Index" },
@@ -112,7 +114,7 @@ export default function AIScanner() {
 
     closeWs();
 
-    const ws = new WebSocket(`wss://ws.binaryws.com/websockets/v3?app_id=${DERIV_APP_ID}`);
+    const ws = new WebSocket(WS_URL);
     wsRef.current = ws;
 
     const count = Math.min(parseInt(ticks) || 500, 2000);
