@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Play, Square, ChevronUp, ChevronDown, X } from "lucide-react";
 import { useBot } from "@/context/BotContext";
 import { useAuth } from "@/context/AuthContext";
@@ -6,6 +6,21 @@ import { DERIV_APP_ID } from "@/context/AuthContext";
 
 const WS_URL = `wss://ws.binaryws.com/websockets/v3?app_id=${DERIV_APP_ID}`;
 const TOKEN_KEY = "deriv_token";
+
+function useClock() {
+  const [ts, setTs] = useState(() => new Date().toLocaleString("en-GB", {
+    year:"numeric", month:"2-digit", day:"2-digit",
+    hour:"2-digit", minute:"2-digit", second:"2-digit",
+  }));
+  useEffect(() => {
+    const id = setInterval(() => setTs(new Date().toLocaleString("en-GB", {
+      year:"numeric", month:"2-digit", day:"2-digit",
+      hour:"2-digit", minute:"2-digit", second:"2-digit",
+    })), 1000);
+    return () => clearInterval(id);
+  }, []);
+  return ts;
+}
 
 export default function BottomBar() {
   const [expanded, setExpanded]           = useState(false);
@@ -21,6 +36,8 @@ export default function BottomBar() {
     results, totalStake, totalPayout, totalProfit, won, lost, runs,
     setIsRunning, addResult, reset,
   } = useBot();
+
+  const clock = useClock();
 
   const stopBot = () => {
     tradeWsRef.current?.close();
@@ -256,7 +273,7 @@ export default function BottomBar() {
       )}
 
       {/* Main Bar */}
-      <div className="h-[52px] bg-card border-t border-border fixed bottom-0 left-0 right-0 z-40 flex items-center px-4 gap-4 shadow-sm">
+      <div className="h-[52px] bg-card border-t border-border fixed bottom-0 left-0 right-0 z-40 flex items-center px-4 gap-3 shadow-sm">
         <button
           onClick={() => setShowDisclaimer(true)}
           className="text-[#FACC15] border border-[#FACC15] px-3 py-1.5 rounded text-xs font-semibold hover:bg-[#FACC15]/10 transition-colors whitespace-nowrap shrink-0"
@@ -289,16 +306,21 @@ export default function BottomBar() {
         </span>
 
         {isRunning && (
-          <div className="flex-1 px-4 hidden md:flex items-center h-full">
+          <div className="hidden md:flex items-center flex-1 px-2 h-full min-w-0">
             <div className="w-full h-1 bg-border rounded-full overflow-hidden">
               <div className="h-full bg-[#22C55E] rounded-full animate-pulse w-1/3" />
             </div>
           </div>
         )}
 
+        {/* Live timestamp */}
+        <span className="hidden md:block text-[11px] text-muted-foreground font-mono ml-auto shrink-0 select-none">
+          {clock}
+        </span>
+
         <button
           onClick={() => setExpanded(!expanded)}
-          className="p-2 text-muted-foreground hover:text-foreground hover:bg-secondary rounded transition-colors shrink-0 md:ml-auto"
+          className="p-2 text-muted-foreground hover:text-foreground hover:bg-secondary rounded transition-colors shrink-0"
         >
           {expanded ? <ChevronDown className="w-5 h-5" /> : <ChevronUp className="w-5 h-5" />}
         </button>
