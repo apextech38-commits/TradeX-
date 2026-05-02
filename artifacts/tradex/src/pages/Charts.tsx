@@ -1,16 +1,12 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   AreaChart, Area, ResponsiveContainer,
   XAxis, YAxis, CartesianGrid, Tooltip,
 } from "recharts";
 import { useTheme } from "@/components/ThemeProvider";
-import { DERIV_APP_ID } from "@/context/AuthContext";
 
-const WS_URL = `wss://ws.binaryws.com/websockets/v3?app_id=${DERIV_APP_ID}`;
-const TOKEN_KEY = "deriv_token";
 const MAX_TICKS = 100;
-const CONNECT_TIMEOUT_MS = 5000;
-const RETRY_DELAY_MS = 3000;
+const RETRY_DELAY_MS = 4_000;
 
 const SYMBOLS = [
   { label: "V 10",  id: "R_10"  },
@@ -30,16 +26,15 @@ function fmt(epoch: number) {
 
 export default function Charts() {
   const { theme } = useTheme();
-  const [activeSymbol, setActiveSymbol] = useState(SYMBOLS[4]); // V 100
+  const [activeSymbol, setActiveSymbol] = useState(SYMBOLS[4]);
   const [data, setData]         = useState<ChartPoint[]>([]);
   const [connected, setConnected] = useState(false);
-  const [statusLabel, setStatusLabel] = useState("Connecting...");
+  const [statusLabel, setStatusLabel] = useState("Loading...");
+  const [retryCount, setRetryCount]   = useState(0);
 
-  const wsRef        = useRef<WebSocket | null>(null);
-  const mountRef     = useRef(true);
-  const retryRef     = useRef(0);
-  const timeoutRef   = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const esRef        = useRef<EventSource | null>(null);
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mountRef     = useRef(true);
   const symRef       = useRef(activeSymbol.id);
 
   const isDark      = theme === "dark";
@@ -48,137 +43,101 @@ export default function Charts() {
   const tooltipBg   = isDark ? "#121821" : "#fff";
   const tooltipBd   = isDark ? "#1F2933" : "#e5e7eb";
 
-  const clearTimers = () => {
-    if (timeoutRef.current)   { clearTimeout(timeoutRef.current);   timeoutRef.current   = null; }
+  const stopStream = () => {
+    if (esRef.current) { esRef.current.close(); esRef.current = null; }
     if (retryTimerRef.current) { clearTimeout(retryTimerRef.current); retryTimerRef.current = null; }
   };
 
-  const sendHistory = useCallback((ws: WebSocket) => {
-    ws.send(JSON.stringify({
-      ticks_history: symRef.current,
-      count: MAX_TICKS,
-      end: "latest",
-      start: 1,
-      style: "ticks",
-      subscribe: 1,
-    }));
-  }, []);
-
-  const connect = useCallback(() => {
-    if (!mountRef.current) return;
-    clearTimers();
-
-    // Close any existing connection
-    if (wsRef.current) {
-      wsRef.current.onclose = null;
-      wsRef.current.close();
-    }
-
-    const ws = new WebSocket(WS_URL);
-    wsRef.current = ws;
-
-    // 5-second connection timeout → retry
-    timeoutRef.current = setTimeout(() => {
-      if (!mountRef.current) return;
-      if (ws.readyState !== WebSocket.OPEN) {
-        ws.onclose = null;
-        ws.close();
-        retryRef.current++;
-        setStatusLabel(`Reconnecting... (attempt ${retryRef.current})`);
-        retryTimerRef.current = setTimeout(connect, RETRY_DELAY_MS);
-      }
-    }, CONNECT_TIMEOUT_MS);
-
-    ws.onopen = () => {
-      if (!mountRef.current) return;
-      clearTimers();
-      retryRef.current = 0;
-      setConnected(true);
-      setStatusLabel("Live");
-
-      const token = localStorage.getItem(TOKEN_KEY);
-      if (token) {
-        ws.send(JSON.stringify({ authorize: token }));
-      } else {
-        sendHistory(ws);
-      }
-    };
-
-    ws.onmessage = (evt) => {
-      if (!mountRef.current) return;
-      try {
-        const msg = JSON.parse(evt.data);
-        if (msg.error) {
-          console.warn("[Charts WS error]", msg.error.message);
-          return;
-        }
-
-        // After auth, request history + subscribe
-        if (msg.msg_type === "authorize") {
-          sendHistory(ws);
-          return;
-        }
-
-        // Bulk history response — populate chart immediately
-        if (msg.msg_type === "history") {
-          const { prices, times } = msg.history as { prices: number[]; times: number[] };
-          const points: ChartPoint[] = prices.map((p, i) => ({
-            time: fmt(times[i]),
-            value: p,
-          }));
-          setData(points.slice(-MAX_TICKS));
-          return;
-        }
-
-        // Live tick update
-        if (msg.msg_type === "tick") {
-          const t = msg.tick;
-          setData(prev => {
-            const next = [...prev, { time: fmt(t.epoch), value: t.quote }];
-            return next.length > MAX_TICKS ? next.slice(next.length - MAX_TICKS) : next;
-          });
-        }
-      } catch (_) {}
-    };
-
-    ws.onerror = () => {
-      if (!mountRef.current) return;
-      setConnected(false);
-      setStatusLabel("Connection error");
-    };
-
-    ws.onclose = () => {
-      if (!mountRef.current) return;
-      setConnected(false);
-      retryRef.current++;
-      setStatusLabel(`Reconnecting... (attempt ${retryRef.current})`);
-      retryTimerRef.current = setTimeout(connect, RETRY_DELAY_MS);
-    };
-  }, [sendHistory]);
-
-  // Reconnect when symbol changes
   useEffect(() => {
     mountRef.current = true;
     symRef.current = activeSymbol.id;
     setData([]);
     setConnected(false);
-    retryRef.current = 0;
-    setStatusLabel("Connecting...");
-    connect();
+    setRetryCount(0);
+    setStatusLabel("Loading...");
+    stopStream();
+
+    let attempt = 0;
+
+    const start = () => {
+      if (!mountRef.current) return;
+      const sym = symRef.current;
+
+      setStatusLabel(attempt === 0 ? "Loading..." : `Reconnecting... (attempt ${attempt})`);
+      setConnected(false);
+
+      fetch(`/api/ticks/${sym}?count=${MAX_TICKS}`)
+        .then(r => {
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          return r.json() as Promise<{ prices: number[]; times: number[]; error?: string }>;
+        })
+        .then(({ prices, times, error }) => {
+          if (!mountRef.current || symRef.current !== sym) return;
+          if (error) throw new Error(error);
+
+          const points: ChartPoint[] = prices.map((p, i) => ({
+            time: fmt(times[i]),
+            value: p,
+          }));
+          setData(points.slice(-MAX_TICKS));
+
+          const es = new EventSource(`/api/ticks/stream/${sym}`);
+          esRef.current = es;
+
+          es.onopen = () => {
+            if (!mountRef.current || symRef.current !== sym) { es.close(); return; }
+            attempt = 0;
+            setRetryCount(0);
+            setConnected(true);
+            setStatusLabel("Live");
+          };
+
+          es.onmessage = (evt) => {
+            if (!mountRef.current || symRef.current !== sym) return;
+            try {
+              const { value, epoch, error: err } = JSON.parse(evt.data);
+              if (err) { es.close(); return; }
+              setData(prev => {
+                const next = [...prev, { time: fmt(epoch), value }];
+                return next.length > MAX_TICKS ? next.slice(-MAX_TICKS) : next;
+              });
+            } catch (_) {}
+          };
+
+          es.onerror = () => {
+            if (!mountRef.current || symRef.current !== sym) return;
+            es.close();
+            esRef.current = null;
+            setConnected(false);
+            attempt++;
+            setRetryCount(attempt);
+            setStatusLabel(`Reconnecting... (attempt ${attempt})`);
+            retryTimerRef.current = setTimeout(start, RETRY_DELAY_MS);
+          };
+        })
+        .catch(() => {
+          if (!mountRef.current || symRef.current !== sym) return;
+          attempt++;
+          setRetryCount(attempt);
+          setStatusLabel(`Reconnecting... (attempt ${attempt})`);
+          retryTimerRef.current = setTimeout(start, RETRY_DELAY_MS);
+        });
+    };
+
+    start();
 
     return () => {
       mountRef.current = false;
-      clearTimers();
-      if (wsRef.current) { wsRef.current.onclose = null; wsRef.current.close(); }
+      stopStream();
     };
-  }, [activeSymbol.id, connect]);
+  }, [activeSymbol.id]);
 
   const latestVal  = data.length > 0 ? data[data.length - 1].value : null;
   const prevVal    = data.length >= 2 ? data[data.length - 2].value : null;
   const delta      = latestVal !== null && prevVal !== null ? latestVal - prevVal : 0;
   const isPositive = delta >= 0;
   const fullLabel  = `Volatility ${activeSymbol.id.replace("R_", "")} Index`;
-  const isConnecting = !connected;
+  const isRetrying = statusLabel.startsWith("Reconnecting");
 
   return (
     <div className="flex flex-col w-full h-[calc(100vh-56px-52px)] bg-background">
@@ -200,9 +159,9 @@ export default function Charts() {
         ))}
         <div className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground shrink-0">
           <span className={`w-2 h-2 rounded-full ${
-            connected ? "bg-[#22C55E]" :
-            statusLabel.startsWith("Reconnecting") ? "bg-[#EF4444] animate-pulse" :
-            "bg-[#FACC15] animate-pulse"
+            connected   ? "bg-[#22C55E]" :
+            isRetrying  ? "bg-[#EF4444] animate-pulse" :
+                          "bg-[#FACC15] animate-pulse"
           }`} />
           {statusLabel}
         </div>
@@ -220,9 +179,6 @@ export default function Charts() {
               {isPositive ? "+" : ""}{delta.toFixed(3)}
             </span>
           )}
-          {isConnecting && data.length === 0 && (
-            <span className="text-xs text-muted-foreground animate-pulse ml-2">{statusLabel}</span>
-          )}
         </div>
       </div>
 
@@ -232,14 +188,14 @@ export default function Charts() {
           <div className="flex items-center justify-center h-full">
             <div className="text-center space-y-3">
               <div className={`w-10 h-10 rounded-full border-4 animate-spin mx-auto ${
-                statusLabel.startsWith("Reconnecting")
+                isRetrying
                   ? "border-[#EF4444]/20 border-t-[#EF4444]"
                   : "border-[#3B82F6]/20 border-t-[#3B82F6]"
               }`} />
               <p className="text-sm text-muted-foreground">{statusLabel}</p>
-              {statusLabel.startsWith("Reconnecting") && (
+              {retryCount > 0 && (
                 <p className="text-xs text-muted-foreground opacity-60">
-                  Retrying in {RETRY_DELAY_MS / 1000}s — check your internet connection
+                  Retry {retryCount} — check server connection
                 </p>
               )}
             </div>
