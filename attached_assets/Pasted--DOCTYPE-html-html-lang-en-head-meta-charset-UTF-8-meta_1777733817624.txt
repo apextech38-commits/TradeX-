@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Volatility 100 Index – Live Chart</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600&family=Syne:wght@400;700;800&display=swap');
+ 
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+ 
+    :root {
+      --bg: #0a0c10;
+      --panel: #10141c;
+      --border: #1e2430;
+      --accent: #00e5a0;
+      --accent2: #0095ff;
+      --red: #ff4d6a;
+      --text: #e2e8f0;
+      --muted: #4a5568;
+      --label: #8892a4;
+    }
+ 
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'JetBrains Mono', monospace;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+ 
+    /* ── Top Bar ── */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 24px;
+      border-bottom: 1px solid var(--border);
+      background: var(--panel);
+    }
+ 
+    .logo {
+      font-family: 'Syne', sans-serif;
+      font-weight: 800;
+      font-size: 1.2rem;
+      color: var(--accent);
+      letter-spacing: -0.5px;
+    }
+ 
+    .instrument {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+ 
+    .instrument-name {
+      font-family: 'Syne', sans-serif;
+      font-weight: 700;
+      font-size: 1rem;
+      color: var(--text);
+    }
+ 
+    .badge {
+      background: #1a2235;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 2px 8px;
+      font-size: 0.65rem;
+      color: var(--label);
+      letter-spacing: 1px;
+    }
+ 
+    .status-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 8px var(--accent);
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+ 
+    /* ── Price Bar ── */
+    .price-bar {
+      display: flex;
+      align-items: center;
+      gap: 24px;
+      padding: 10px 24px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+      flex-wrap: wrap;
+    }
+ 
+    .price-main {
+      font-family: 'Syne', sans-serif;
+      font-size: 2rem;
+      font-weight: 800;
+      color: var(--text);
+      letter-spacing: -1px;
+      transition: color 0.3s;
+    }
+ 
+    .price-change {
+      font-size: 0.8rem;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-weight: 600;
+    }
+    .price-change.up   { background: rgba(0,229,160,0.1); color: var(--accent); }
+    .price-change.down { background: rgba(255,77,106,0.1); color: var(--red); }
+ 
+    .stat {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .stat-label { font-size: 0.6rem; color: var(--label); letter-spacing: 1px; text-transform: uppercase; }
+    .stat-value { font-size: 0.85rem; color: var(--text); }
+ 
+    /* ── Chart Area ── */
+    .chart-wrapper {
+      flex: 1;
+      padding: 20px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+ 
+    .chart-controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+ 
+    .ctrl-btn {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--label);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.7rem;
+      padding: 4px 10px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .ctrl-btn:hover, .ctrl-btn.active {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: rgba(0,229,160,0.05);
+    }
+ 
+    .canvas-wrap {
+      flex: 1;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      position: relative;
+      min-height: 340px;
+    }
+ 
+    canvas { width: 100% !important; }
+ 
+    /* ── Footer ── */
+    footer {
+      padding: 8px 24px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.65rem;
+      color: var(--muted);
+    }
+ 
+    #conn-status { color: var(--accent); }
+    #conn-status.error { color: var(--red); }
+ 
+    /* ── Flash animation on new tick ── */
+    @keyframes flashGreen { 0%,100%{color:var(--text)} 50%{color:var(--accent)} }
+    @keyframes flashRed   { 0%,100%{color:var(--text)} 50%{color:var(--red)} }
+    .flash-up   { animation: flashGreen 0.4s ease; }
+    .flash-down { animation: flashRed   0.4s ease; }
+  </style>
+</head>
+<body>
+ 
+<header>
+  <div class="logo">TradeX</div>
+  <div class="instrument">
+    <div class="status-dot" id="dot"></div>
+    <div class="instrument-name">Volatility 100 Index</div>
+    <div class="badge">R_100 · TICK</div>
+  </div>
+  <div style="font-size:0.7rem;color:var(--label)" id="utc-time">--:--:-- UTC</div>
+</header>
+ 
+<div class="price-bar">
+  <div class="price-main" id="price">---.--</div>
+  <div class="price-change" id="price-change">--</div>
+  <div class="stat"><div class="stat-label">High</div><div class="stat-value" id="stat-high">--</div></div>
+  <div class="stat"><div class="stat-label">Low</div><div class="stat-value" id="stat-low">--</div></div>
+  <div class="stat"><div class="stat-label">Open</div><div class="stat-value" id="stat-open">--</div></div>
+  <div class="stat"><div class="stat-label">Ticks</div><div class="stat-value" id="stat-ticks">0</div></div>
+</div>
+ 
+<div class="chart-wrapper">
+  <div class="chart-controls">
+    <span style="font-size:0.65rem;color:var(--label);margin-right:4px">SHOW:</span>
+    <button class="ctrl-btn active" id="btn-100" onclick="setMax(100)">100</button>
+    <button class="ctrl-btn" id="btn-200" onclick="setMax(200)">200</button>
+    <button class="ctrl-btn" id="btn-500" onclick="setMax(500)">500</button>
+  </div>
+  <div class="canvas-wrap">
+    <canvas id="chart"></canvas>
+  </div>
+</div>
+ 
+<footer>
+  <span id="conn-status">Connecting…</span>
+  <span>Powered by Deriv WebSocket API</span>
+  <span id="last-tick">Last tick: --</span>
+</footer>
+ 
+<script>
+  // ── Config ──────────────────────────────────────────
+  const APP_ID  = 1089;           // public demo app id
+  const SYMBOL  = 'R_100';
+  const WS_URL  = `wss://ws.binaryws.com/websockets/v3?app_id=${APP_ID}`;
+  const MAX_VISIBLE = 100;        // default ticks shown
+ 
+  // ── State ───────────────────────────────────────────
+  let allTicks  = [];
+  let maxVisible = MAX_VISIBLE;
+  let openPrice  = null;
+  let high = -Infinity, low = Infinity;
+  let tickCount  = 0;
+  let ws;
+ 
+  // ── Clock ────────────────────────────────────────────
+  setInterval(() => {
+    document.getElementById('utc-time').textContent =
+      new Date().toUTCString().slice(17, 25) + ' UTC';
+  }, 1000);
+ 
+  // ── Chart setup ──────────────────────────────────────
+  const ctx = document.getElementById('chart').getContext('2d');
+  const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+  gradient.addColorStop(0,   'rgba(0,229,160,0.18)');
+  gradient.addColorStop(1,   'rgba(0,229,160,0)');
+ 
+  const chart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [{
+        label: 'R_100',
+        data: [],
+        borderColor: '#00e5a0',
+        borderWidth: 1.5,
+        backgroundColor: gradient,
+        pointRadius: 0,
+        tension: 0.1,
+        fill: true,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      interaction: { intersect: false, mode: 'index' },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#10141c',
+          borderColor: '#1e2430',
+          borderWidth: 1,
+          titleColor: '#8892a4',
+          bodyColor: '#e2e8f0',
+          titleFont: { family: 'JetBrains Mono', size: 10 },
+          bodyFont:  { family: 'JetBrains Mono', size: 12 },
+          callbacks: {
+            title: items => items[0].label,
+            label: item  => ' ' + item.raw.toFixed(3),
+          }
+        }
+      },
+      scales: {
+        x: {
+          ticks: { color: '#4a5568', font: { family: 'JetBrains Mono', size: 9 }, maxTicksLimit: 8 },
+          grid:  { color: '#1e2430' },
+        },
+        y: {
+          position: 'right',
+          ticks: { color: '#8892a4', font: { family: 'JetBrains Mono', size: 10 }, maxTicksLimit: 6 },
+          grid:  { color: '#1e2430' },
+        }
+      }
+    }
+  });
+ 
+  // ── Helpers ──────────────────────────────────────────
+  function fmtTime(epoch) {
+    const d = new Date(epoch * 1000);
+    return d.toUTCString().slice(17, 25);
+  }
+ 
+  function updateChart() {
+    const slice  = allTicks.slice(-maxVisible);
+    chart.data.labels   = slice.map(t => fmtTime(t.epoch));
+    chart.data.datasets[0].data = slice.map(t => t.quote);
+    chart.update('none');
+  }
+ 
+  function setMax(n) {
+    maxVisible = n;
+    ['100','200','500'].forEach(x => {
+      document.getElementById('btn-'+x).classList.toggle('active', x == n);
+    });
+    updateChart();
+  }
+ 
+  // ── WebSocket ─────────────────────────────────────────
+  function connect() {
+    ws = new WebSocket(WS_URL);
+ 
+    ws.onopen = () => {
+      document.getElementById('conn-status').textContent = 'Connected';
+      document.getElementById('conn-status').className = '';
+ 
+      // Get last 500 ticks first
+      ws.send(JSON.stringify({
+        ticks_history: SYMBOL,
+        adjust_start_time: 1,
+        count: 500,
+        end: 'latest',
+        start: 1,
+        style: 'ticks'
+      }));
+    };
+ 
+    ws.onmessage = (e) => {
+      const msg = JSON.parse(e.data);
+ 
+      // History response
+      if (msg.history) {
+        const prices = msg.history.prices;
+        const times  = msg.history.times;
+        allTicks = times.map((t, i) => ({ epoch: t, quote: prices[i] }));
+        openPrice = allTicks[0]?.quote;
+        high = Math.max(...prices);
+        low  = Math.min(...prices);
+        tickCount = allTicks.length;
+        updateStats(allTicks[allTicks.length - 1]?.quote);
+        updateChart();
+ 
+        // Now subscribe to live ticks
+        ws.send(JSON.stringify({ ticks: SYMBOL, subscribe: 1 }));
+      }
+ 
+      // Live tick
+      if (msg.tick) {
+        const { quote, epoch } = msg.tick;
+        const prev = allTicks[allTicks.length - 1]?.quote;
+ 
+        allTicks.push({ epoch, quote });
+        if (allTicks.length > 2000) allTicks.shift();
+ 
+        tickCount++;
+        if (quote > high) high = quote;
+        if (quote < low)  low  = quote;
+ 
+        updateStats(quote, prev);
+        updateChart();
+ 
+        document.getElementById('last-tick').textContent =
+          'Last tick: ' + fmtTime(epoch);
+      }
+ 
+      if (msg.error) {
+        document.getElementById('conn-status').textContent = msg.error.message;
+        document.getElementById('conn-status').className = 'error';
+      }
+    };
+ 
+    ws.onerror = () => {
+      document.getElementById('conn-status').textContent = 'Connection error — retrying…';
+      document.getElementById('conn-status').className = 'error';
+    };
+ 
+    ws.onclose = () => {
+      document.getElementById('conn-status').textContent = 'Disconnected — reconnecting…';
+      document.getElementById('conn-status').className = 'error';
+      setTimeout(connect, 3000);
+    };
+  }
+ 
+  function updateStats(price, prev) {
+    if (!price) return;
+    const el = document.getElementById('price');
+    el.textContent = price.toFixed(3);
+ 
+    // Flash colour
+    if (prev !== undefined) {
+      el.classList.remove('flash-up','flash-down');
+      void el.offsetWidth;
+      el.classList.add(price >= prev ? 'flash-up' : 'flash-down');
+    }
+ 
+    // Change vs open
+    if (openPrice) {
+      const diff = price - openPrice;
+      const pct  = ((diff / openPrice) * 100).toFixed(2);
+      const sign = diff >= 0 ? '+' : '';
+      const chEl = document.getElementById('price-change');
+      chEl.textContent = `${sign}${diff.toFixed(3)} (${sign}${pct}%)`;
+      chEl.className = 'price-change ' + (diff >= 0 ? 'up' : 'down');
+    }
+ 
+    document.getElementById('stat-high').textContent  = high.toFixed(3);
+    document.getElementById('stat-low').textContent   = low.toFixed(3);
+    document.getElementById('stat-open').textContent  = openPrice?.toFixed(3) ?? '--';
+    document.getElementById('stat-ticks').textContent = tickCount;
+  }
+ 
+  connect();
+</script>
+</body>
+</html>
+ 

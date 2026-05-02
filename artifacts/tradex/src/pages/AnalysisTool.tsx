@@ -3,17 +3,19 @@ import { Info, Settings } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { DERIV_APP_ID } from "@/context/AuthContext";
 
-const WS_URL    = `wss://ws.binaryws.com/websockets/v3?app_id=${DERIV_APP_ID}`;
-const TOKEN_KEY = "deriv_token";
+// Always open a fresh direct browser WS — no server proxy, no auth gate
+const WS_URL          = `wss://ws.binaryws.com/websockets/v3?app_id=${DERIV_APP_ID}`;
 const OPEN_TIMEOUT_MS = 5_000;
 const RETRY_DELAY_MS  = 3_000;
 
 const SYMBOLS = [
-  { label: "Volatility 10 (1s) Index", id: "R_10"  },
-  { label: "Volatility 25 Index",       id: "R_25"  },
-  { label: "Volatility 50 Index",       id: "R_50"  },
-  { label: "Volatility 75 Index",       id: "R_75"  },
-  { label: "Volatility 100 Index",      id: "R_100" },
+  { label: "Volatility 10 Index",        id: "R_10"    },
+  { label: "Volatility 10 (1s) Index",   id: "1HZ10V"  },
+  { label: "Volatility 25 Index",        id: "R_25"    },
+  { label: "Volatility 50 Index",        id: "R_50"    },
+  { label: "Volatility 75 Index",        id: "R_75"    },
+  { label: "Volatility 100 Index",       id: "R_100"   },
+  { label: "Volatility 100 (1s) Index",  id: "1HZ100V" },
 ];
 
 function lastDigit(quote: number): number {
@@ -37,7 +39,6 @@ export default function AnalysisTool() {
   const symRef        = useRef(selectedSym.id);
   const windowRef     = useRef(tickWindow);
 
-  // Keep windowRef in sync
   useEffect(() => { windowRef.current = tickWindow; }, [tickWindow]);
 
   const clearTimers = useCallback(() => {
@@ -55,20 +56,19 @@ export default function AnalysisTool() {
       wsRef.current = null;
     }
 
+    // Always open a fresh browser-direct WebSocket
     const ws = new WebSocket(WS_URL);
     wsRef.current = ws;
 
-    // 5-second open timeout → retry
+    // 5-second open timeout → force retry
     openTimerRef.current = setTimeout(() => {
-      if (!mountRef.current) return;
-      if (ws.readyState !== WebSocket.OPEN) {
-        ws.onclose = null;
-        ws.close();
-        retryRef.current++;
-        setConnected(false);
-        setStatusLabel(`Reconnecting... (attempt ${retryRef.current})`);
-        retryTimerRef.current = setTimeout(connect, RETRY_DELAY_MS);
-      }
+      if (!mountRef.current || ws.readyState === WebSocket.OPEN) return;
+      ws.onclose = null;
+      ws.close();
+      retryRef.current++;
+      setConnected(false);
+      setStatusLabel(`Reconnecting... (attempt ${retryRef.current})`);
+      retryTimerRef.current = setTimeout(connect, RETRY_DELAY_MS);
     }, OPEN_TIMEOUT_MS);
 
     ws.onopen = () => {
@@ -78,40 +78,28 @@ export default function AnalysisTool() {
       setConnected(true);
       setStatusLabel("Live");
 
-      const sym   = symRef.current;
-      const token = localStorage.getItem(TOKEN_KEY);
-
-      const requestHistory = () => {
-        ws.send(JSON.stringify({
-          ticks_history: sym,
-          count:   1000,
-          end:     "latest",
-          start:   1,
-          style:   "ticks",
-          subscribe: 1,
-        }));
-      };
-
-      if (token) {
-        ws.send(JSON.stringify({ authorize: token }));
-        (ws as any).__pendingHistory = requestHistory;
-      } else {
-        requestHistory();
-      }
+      // Send ticks_history IMMEDIATELY on open — public symbols need no auth
+      // This is the fix: do NOT gate this on authorize — an expired/invalid token
+      // would silently block history from ever being requested
+      ws.send(JSON.stringify({
+        ticks_history: symRef.current,
+        count:         1000,
+        end:           "latest",
+        start:         1,
+        style:         "ticks",
+        subscribe:     1,
+      }));
     };
 
     ws.onmessage = (evt) => {
       if (!mountRef.current) return;
       try {
         const msg = JSON.parse(evt.data);
-        if (msg.error) {
-          console.warn("[AnalysisTool WS]", msg.error.message);
-          return;
-        }
 
-        if (msg.msg_type === "authorize") {
-          const fn = (ws as any).__pendingHistory;
-          if (fn) { fn(); delete (ws as any).__pendingHistory; }
+        // Silently skip errors — do NOT block/retry on WS-level errors like
+        // "invalid symbol" — just log and let the stream continue
+        if (msg.error) {
+          console.warn("[AnalysisTool WS]", msg.error.code, msg.error.message);
           return;
         }
 
@@ -174,6 +162,7 @@ export default function AnalysisTool() {
     setHistory(prev => prev.length > tickWindow ? prev.slice(-tickWindow) : prev);
   }, [tickWindow]);
 
+  // ── Compute stats ──────────────────────────────────────────────────────────
   const digitCounts = Array(10).fill(0);
   let evenCount = 0, oddCount = 0, over5 = 0, under5 = 0, eq5 = 0;
   let matchCount = 0, differCount = 0;
@@ -230,7 +219,7 @@ export default function AnalysisTool() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left — Live Price */}
+        {/* Left — Live Price + symbol selector */}
         <div className="lg:col-span-1 bg-card border border-border rounded-xl p-6 flex flex-col items-center justify-center py-10 shadow-sm space-y-6">
           <select
             value={selectedSym.id}
