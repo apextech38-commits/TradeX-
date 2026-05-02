@@ -24,7 +24,7 @@ export default function Navbar({ activeTab, setActiveTab }: NavbarProps) {
   const { theme, setTheme } = useTheme();
   const {
     isLoggedIn, isAuthorized, activeAccount, accounts,
-    balance, currency, wsConnected, login, logout, switchAccount,
+    balance, currency, wsConnected, login, signup, logout, switchAccount,
   } = useAuth();
 
   const [showAccountMenu, setShowAccountMenu] = useState(false);
@@ -169,7 +169,7 @@ export default function Navbar({ activeTab, setActiveTab }: NavbarProps) {
               </button>
               <button
                 data-testid="button-signup"
-                onClick={login}
+                onClick={signup}
                 className="px-4 py-1.5 text-sm font-semibold text-white bg-[#22C55E] hover:bg-[#16a34a] rounded-md transition-colors"
               >
                 Sign Up
@@ -283,7 +283,7 @@ export default function Navbar({ activeTab, setActiveTab }: NavbarProps) {
               </button>
               <button
                 data-testid="mobile-signup"
-                onClick={() => { login(); setMobileOpen(false); }}
+                onClick={() => { signup(); setMobileOpen(false); }}
                 className="w-full py-2.5 text-sm font-semibold text-white bg-[#22C55E] hover:bg-[#16a34a] rounded-md transition-colors"
               >
                 Sign Up

@@ -3,9 +3,16 @@ import {
   useRef, useCallback, ReactNode
 } from "react";
 
+// App ID for public WebSocket tick streaming (no auth required)
 export const DERIV_APP_ID = "1089";
-const WS_URL = `wss://ws.binaryws.com/websockets/v3?app_id=${DERIV_APP_ID}`;
-const OAUTH_URL = `https://oauth.deriv.com/oauth2/authorize?app_id=${DERIV_APP_ID}&l=EN&brand=deriv`;
+
+// App ID registered with redirect URI → https://dev-utility-hub--apexricky20.replit.app/callback
+// This must be the user's own registered Deriv app (numeric ID from https://app.deriv.com/account/api-token)
+export const OAUTH_APP_ID = "339";
+
+const WS_URL   = `wss://ws.binaryws.com/websockets/v3?app_id=${DERIV_APP_ID}`;
+const OAUTH_URL = `https://oauth.deriv.com/oauth2/authorize?app_id=${OAUTH_APP_ID}&l=EN&brand=deriv`;
+const SIGNUP_URL = `https://deriv.com/signup/?lang=EN`;
 const TOKEN_KEY = "deriv_token";
 const ACCOUNTS_KEY = "tradex-deriv-accounts";
 
@@ -24,6 +31,7 @@ interface AuthState {
   currency: string;
   wsConnected: boolean;
   login: () => void;
+  signup: () => void;
   logout: () => void;
   switchAccount: (acct: DerivAccount) => void;
   sendWS: (msg: object) => void;
@@ -38,6 +46,7 @@ const AuthContext = createContext<AuthState>({
   currency: "USD",
   wsConnected: false,
   login: () => {},
+  signup: () => {},
   logout: () => {},
   switchAccount: () => {},
   sendWS: () => {},
@@ -150,9 +159,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const login = () => {
-    window.location.href = OAUTH_URL;
-  };
+  const login  = () => { window.location.href = OAUTH_URL;  };
+  const signup = () => { window.location.href = SIGNUP_URL; };
 
   const logout = () => {
     sendWS({ logout: 1 });
@@ -184,6 +192,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       currency,
       wsConnected,
       login,
+      signup,
       logout,
       switchAccount,
       sendWS,
