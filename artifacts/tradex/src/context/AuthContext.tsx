@@ -7,10 +7,14 @@ import {
 export const DERIV_APP_ID = "129077";
 export const OAUTH_APP_ID = "129077";
 
-const WS_URL     = `wss://ws.binaryws.com/websockets/v3?app_id=${DERIV_APP_ID}`;
-const SIGNUP_URL = `https://deriv.com/signup/?lang=EN`;
-// No redirect_uri — Deriv uses the URI registered against app_id 129077 automatically.
-const OAUTH_URL  = `https://oauth.deriv.com/oauth2/authorize?app_id=${OAUTH_APP_ID}&l=EN&brand=deriv`;
+const WS_URL      = `wss://ws.binaryws.com/websockets/v3?app_id=${DERIV_APP_ID}`;
+const SIGNUP_URL  = `https://deriv.com/signup/?lang=EN`;
+
+// Deriv requires redirect_uri to be explicit and match exactly what is
+// registered in the Deriv API dashboard for app_id 129077.
+// Registered URI: https://dev-utility-hub--apexricky20.replit.app/callback
+const REDIRECT_URI = "https://dev-utility-hub--apexricky20.replit.app/callback";
+const OAUTH_URL    = `https://oauth.deriv.com/oauth2/authorize?app_id=${OAUTH_APP_ID}&l=EN&brand=deriv&redirect_uri=${encodeURIComponent(REDIRECT_URI)}`;
 const TOKEN_KEY = "deriv_token";
 const ACCOUNTS_KEY = "tradex-deriv-accounts";
 

@@ -4,9 +4,10 @@ import { OAUTH_APP_ID } from "@/context/AuthContext";
 const TOKEN_KEY    = "deriv_token";
 const ACCOUNTS_KEY = "tradex-deriv-accounts";
 
-// No redirect_uri — Deriv uses the URI registered against the app_id automatically.
+// Must match exactly what is registered in the Deriv API dashboard for app_id 129077.
+const REDIRECT_URI = "https://dev-utility-hub--apexricky20.replit.app/callback";
 function buildOAuthUrl(): string {
-  return `https://oauth.deriv.com/oauth2/authorize?app_id=${OAUTH_APP_ID}&l=EN&brand=deriv`;
+  return `https://oauth.deriv.com/oauth2/authorize?app_id=${OAUTH_APP_ID}&l=EN&brand=deriv&redirect_uri=${encodeURIComponent(REDIRECT_URI)}`;
 }
 
 interface ParseResult {
