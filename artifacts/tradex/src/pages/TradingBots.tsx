@@ -105,8 +105,8 @@ export default function TradingBots() {
     setToast(`${cfg.name} loaded successfully`);
     setTimeout(() => setToast(null), 3500);
 
-    // Navigate to Bot Builder tab
-    window.dispatchEvent(new CustomEvent("tradex:navigate", { detail: "Bot Builder" }));
+    // Navigate to Trading Bots tab (dbot runner)
+    window.dispatchEvent(new CustomEvent("tradex:navigate", { detail: "Trading Bots" }));
   };
 
   return (

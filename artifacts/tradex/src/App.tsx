@@ -50,10 +50,10 @@ function AppContent() {
   const renderContent = () => {
     switch (activeTab) {
       case "Dashboard":      return <Dashboard />;
-      case "Bot Builder":    return <BotBuilder />;
+      case "Bot Builder":    return <TradingBots />;
       case "Manual Traders": return <ManualTraders />;
       case "Charts":         return <Charts />;
-      case "Trading Bots":   return <TradingBots />;
+      case "Trading Bots":   return <BotBuilder />;
       case "Analysis Tool":  return <AnalysisTool />;
       case "Strategies":     return <Strategies />;
       case "Copy Trading":   return <CopyTrading />;
