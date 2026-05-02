@@ -4,11 +4,9 @@ import { OAUTH_APP_ID } from "@/context/AuthContext";
 const TOKEN_KEY    = "deriv_token";
 const ACCOUNTS_KEY = "tradex-deriv-accounts";
 
-// Build the OAuth URL identically to AuthContext so the retry flow always
-// redirects back to the correct callback, even across environments.
+// No redirect_uri — Deriv uses the URI registered against the app_id automatically.
 function buildOAuthUrl(): string {
-  const redirectUri = encodeURIComponent(`${window.location.origin}/callback`);
-  return `https://oauth.deriv.com/oauth2/authorize?app_id=${OAUTH_APP_ID}&l=EN&brand=deriv&redirect_uri=${redirectUri}`;
+  return `https://oauth.deriv.com/oauth2/authorize?app_id=${OAUTH_APP_ID}&l=EN&brand=deriv`;
 }
 
 interface ParseResult {
