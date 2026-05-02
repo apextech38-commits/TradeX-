@@ -1,18 +1,17 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Info, Settings } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
-import { DERIV_APP_ID } from "@/context/AuthContext";
-
-const WS_URL = `wss://ws.binaryws.com/websockets/v3?app_id=${DERIV_APP_ID}`;
-const TOKEN_KEY = "deriv_token";
 
 const SYMBOLS = [
-  { label: "Volatility 10 (1s) Index", id: "R_10" },
-  { label: "Volatility 25 Index",       id: "R_25" },
-  { label: "Volatility 50 Index",       id: "R_50" },
-  { label: "Volatility 75 Index",       id: "R_75" },
+  { label: "Volatility 10 (1s) Index", id: "R_10"  },
+  { label: "Volatility 25 Index",       id: "R_25"  },
+  { label: "Volatility 50 Index",       id: "R_50"  },
+  { label: "Volatility 75 Index",       id: "R_75"  },
   { label: "Volatility 100 Index",      id: "R_100" },
 ];
+
+const RETRY_DELAY_MS = 4_000;
+const HISTORY_COUNT  = 1000;
 
 function lastDigit(quote: number): number {
   return parseInt(quote.toFixed(2).slice(-1));
@@ -20,110 +19,22 @@ function lastDigit(quote: number): number {
 
 export default function AnalysisTool() {
   const [selectedSym, setSelectedSym] = useState(SYMBOLS[0]);
-  const [history, setHistory]   = useState<number[]>([]);
+  const [history, setHistory]         = useState<number[]>([]);
   const [latestPrice, setLatestPrice] = useState<number | null>(null);
   const [tickWindow, setTickWindow]   = useState(1000);
-  const [connected, setConnected] = useState(false);
-  const [matchDigit, setMatchDigit] = useState(0);
+  const [connected, setConnected]     = useState(false);
+  const [matchDigit, setMatchDigit]   = useState(0);
+  const [statusLabel, setStatusLabel] = useState("Loading...");
 
-  const wsRef         = useRef<WebSocket | null>(null);
-  const mountRef      = useRef(true);
-  const retryRef      = useRef(0);
-  const timeoutRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const esRef         = useRef<EventSource | null>(null);
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mountRef      = useRef(true);
   const symRef        = useRef(selectedSym.id);
-  const [statusLabel, setStatusLabel] = useState("Connecting...");
 
-  const clearTimers = () => {
-    if (timeoutRef.current)    { clearTimeout(timeoutRef.current);    timeoutRef.current    = null; }
+  const stopStream = () => {
+    if (esRef.current)       { esRef.current.close(); esRef.current = null; }
     if (retryTimerRef.current) { clearTimeout(retryTimerRef.current); retryTimerRef.current = null; }
   };
-
-  const connectWS = useCallback(() => {
-    if (!mountRef.current) return;
-    clearTimers();
-
-    if (wsRef.current) { wsRef.current.onclose = null; wsRef.current.close(); }
-
-    const ws = new WebSocket(WS_URL);
-    wsRef.current = ws;
-
-    // 5-second connection timeout
-    timeoutRef.current = setTimeout(() => {
-      if (!mountRef.current) return;
-      if (ws.readyState !== WebSocket.OPEN) {
-        ws.onclose = null;
-        ws.close();
-        retryRef.current++;
-        setStatusLabel(`Reconnecting... (attempt ${retryRef.current})`);
-        retryTimerRef.current = setTimeout(connectWS, 3000);
-      }
-    }, 5000);
-
-    const sendHistory = () => {
-      ws.send(JSON.stringify({
-        ticks_history: symRef.current,
-        count: 1000,
-        end: "latest",
-        start: 1,
-        style: "ticks",
-        subscribe: 1,
-      }));
-    };
-
-    ws.onopen = () => {
-      if (!mountRef.current) return;
-      clearTimers();
-      retryRef.current = 0;
-      setConnected(true);
-      setStatusLabel("Live");
-      const token = localStorage.getItem(TOKEN_KEY);
-      if (token) {
-        ws.send(JSON.stringify({ authorize: token }));
-      } else {
-        sendHistory();
-      }
-    };
-
-    ws.onmessage = (evt) => {
-      if (!mountRef.current) return;
-      try {
-        const msg = JSON.parse(evt.data);
-        if (msg.error) return;
-
-        if (msg.msg_type === "authorize") { sendHistory(); return; }
-
-        if (msg.msg_type === "history") {
-          const prices: number[] = msg.history?.prices ?? [];
-          const digits = prices.map(lastDigit);
-          setHistory(digits);
-          if (prices.length > 0) setLatestPrice(prices[prices.length - 1]);
-          return;
-        }
-
-        if (msg.msg_type === "tick") {
-          const quote: number = msg.tick.quote;
-          setLatestPrice(quote);
-          const d = lastDigit(quote);
-          setHistory(prev => {
-            const next = [...prev, d];
-            return next.length > tickWindow ? next.slice(-tickWindow) : next;
-          });
-        }
-      } catch (_) {}
-    };
-
-    ws.onerror = () => { if (mountRef.current) setConnected(false); };
-
-    ws.onclose = () => {
-      if (!mountRef.current) return;
-      setConnected(false);
-      retryRef.current++;
-      setStatusLabel(`Reconnecting... (attempt ${retryRef.current})`);
-      retryTimerRef.current = setTimeout(connectWS, 3000);
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   useEffect(() => {
     mountRef.current = true;
@@ -131,18 +42,82 @@ export default function AnalysisTool() {
     setHistory([]);
     setLatestPrice(null);
     setConnected(false);
-    retryRef.current = 0;
-    setStatusLabel("Connecting...");
-    connectWS();
+    setStatusLabel("Loading...");
+    stopStream();
+
+    let attempt = 0;
+
+    const start = () => {
+      if (!mountRef.current) return;
+      const sym = symRef.current;
+
+      setStatusLabel(attempt === 0 ? "Loading..." : `Reconnecting... (attempt ${attempt})`);
+      setConnected(false);
+
+      fetch(`/api/ticks/${sym}?count=${HISTORY_COUNT}`)
+        .then(r => {
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          return r.json() as Promise<{ prices: number[]; times: number[]; error?: string }>;
+        })
+        .then(({ prices, error }) => {
+          if (!mountRef.current || symRef.current !== sym) return;
+          if (error) throw new Error(error);
+
+          const digits = prices.map(lastDigit);
+          setHistory(digits.slice(-tickWindow));
+          if (prices.length > 0) setLatestPrice(prices[prices.length - 1]);
+
+          const es = new EventSource(`/api/ticks/stream/${sym}`);
+          esRef.current = es;
+
+          es.onopen = () => {
+            if (!mountRef.current || symRef.current !== sym) { es.close(); return; }
+            attempt = 0;
+            setConnected(true);
+            setStatusLabel("Live");
+          };
+
+          es.onmessage = (evt) => {
+            if (!mountRef.current || symRef.current !== sym) return;
+            try {
+              const { value, error: err } = JSON.parse(evt.data) as { value?: number; epoch?: number; error?: string };
+              if (err || value === undefined) { es.close(); return; }
+              setLatestPrice(value);
+              const d = lastDigit(value);
+              setHistory(prev => {
+                const next = [...prev, d];
+                return next.length > tickWindow ? next.slice(-tickWindow) : next;
+              });
+            } catch (_) {}
+          };
+
+          es.onerror = () => {
+            if (!mountRef.current || symRef.current !== sym) return;
+            es.close();
+            esRef.current = null;
+            setConnected(false);
+            attempt++;
+            setStatusLabel(`Reconnecting... (attempt ${attempt})`);
+            retryTimerRef.current = setTimeout(start, RETRY_DELAY_MS);
+          };
+        })
+        .catch(() => {
+          if (!mountRef.current || symRef.current !== sym) return;
+          attempt++;
+          setStatusLabel(`Reconnecting... (attempt ${attempt})`);
+          retryTimerRef.current = setTimeout(start, RETRY_DELAY_MS);
+        });
+    };
+
+    start();
 
     return () => {
       mountRef.current = false;
-      clearTimers();
-      if (wsRef.current) { wsRef.current.onclose = null; wsRef.current.close(); }
+      stopStream();
     };
-  }, [selectedSym.id, connectWS]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedSym.id]);
 
-  // Trim history when window changes
   useEffect(() => {
     setHistory(prev => prev.length > tickWindow ? prev.slice(-tickWindow) : prev);
   }, [tickWindow]);
@@ -158,11 +133,12 @@ export default function AnalysisTool() {
     if (d === matchDigit) matchCount++; else differCount++;
   });
 
-  const total    = history.length || 1;
-  const maxCount = Math.max(...digitCounts);
-  const nonZero  = digitCounts.filter(c => c > 0);
-  const minCount = nonZero.length ? Math.min(...nonZero) : 0;
+  const total      = history.length || 1;
+  const maxCount   = Math.max(...digitCounts);
+  const nonZero    = digitCounts.filter(c => c > 0);
+  const minCount   = nonZero.length ? Math.min(...nonZero) : 0;
   const currentDigit = history.length > 0 ? history[history.length - 1] : null;
+  const isRetrying   = statusLabel.startsWith("Reconnecting");
 
   const getDigitColor = (i: number, count: number) => {
     if (history.length === 0) return "bg-secondary";
@@ -189,9 +165,9 @@ export default function AnalysisTool() {
           </button>
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <span className={`w-2 h-2 rounded-full ${
-              connected ? "bg-[#22C55E]" :
-              statusLabel.startsWith("Reconnecting") ? "bg-[#EF4444] animate-pulse" :
-              "bg-[#FACC15] animate-pulse"
+              connected  ? "bg-[#22C55E]" :
+              isRetrying ? "bg-[#EF4444] animate-pulse" :
+                           "bg-[#FACC15] animate-pulse"
             }`} />
             {statusLabel}
           </div>
@@ -230,8 +206,10 @@ export default function AnalysisTool() {
 
           {history.length === 0 && (
             <div className="flex flex-col items-center gap-2 text-muted-foreground">
-              <div className="w-6 h-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-              <span className="text-xs">Fetching 1000 ticks history...</span>
+              <div className={`w-6 h-6 border-2 rounded-full animate-spin ${
+                isRetrying ? "border-[#EF4444]/30 border-t-[#EF4444]" : "border-primary/30 border-t-primary"
+              }`} />
+              <span className="text-xs">{statusLabel}</span>
             </div>
           )}
         </div>
@@ -281,8 +259,8 @@ export default function AnalysisTool() {
             <div className="bg-card border border-border rounded-xl p-5 space-y-4 shadow-sm">
               <h3 className="font-semibold text-foreground text-sm">Even / Odd</h3>
               {[
-                { label: "Even", pct: (evenCount / total) * 100, count: evenCount, color: "bg-primary", textColor: "text-primary" },
-                { label: "Odd",  pct: (oddCount  / total) * 100, count: oddCount,  color: "bg-muted-foreground", textColor: "text-muted-foreground" },
+                { label: "Even", pct: (evenCount / total) * 100, count: evenCount, color: "bg-primary",            textColor: "text-primary" },
+                { label: "Odd",  pct: (oddCount  / total) * 100, count: oddCount,  color: "bg-muted-foreground",   textColor: "text-muted-foreground" },
               ].map(({ label, pct, count, color, textColor }) => (
                 <div key={label}>
                   <div className="flex justify-between text-sm mb-1">
@@ -308,9 +286,9 @@ export default function AnalysisTool() {
             <div className="bg-card border border-border rounded-xl p-5 space-y-4 shadow-sm">
               <h3 className="font-semibold text-foreground text-sm">Over / Under 5</h3>
               {[
-                { label: "Under", pct: (under5 / total) * 100, count: under5, color: "bg-[#EF4444]", textColor: "text-[#EF4444]" },
-                { label: "Equal", pct: (eq5    / total) * 100, count: eq5,    color: "bg-muted-foreground", textColor: "text-muted-foreground" },
-                { label: "Over",  pct: (over5  / total) * 100, count: over5,  color: "bg-[#22C55E]", textColor: "text-[#22C55E]" },
+                { label: "Under", pct: (under5 / total) * 100, count: under5, color: "bg-[#EF4444]",          textColor: "text-[#EF4444]" },
+                { label: "Equal", pct: (eq5    / total) * 100, count: eq5,    color: "bg-muted-foreground",   textColor: "text-muted-foreground" },
+                { label: "Over",  pct: (over5  / total) * 100, count: over5,  color: "bg-[#22C55E]",          textColor: "text-[#22C55E]" },
               ].map(({ label, pct, count, color, textColor }) => (
                 <div key={label}>
                   <div className="flex justify-between text-sm mb-1">
