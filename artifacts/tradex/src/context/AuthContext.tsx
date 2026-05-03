@@ -1,20 +1,26 @@
 import {
-  createContext, useContext, useState, useEffect,
-  useRef, useCallback, ReactNode
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  ReactNode,
 } from "react";
 
 // Registered Deriv App ID — used for both WebSocket streaming and OAuth login
 export const DERIV_APP_ID = "129077";
 export const OAUTH_APP_ID = "129077";
 
-const WS_URL      = `wss://ws.binaryws.com/websockets/v3?app_id=${DERIV_APP_ID}`;
-const SIGNUP_URL  = `https://deriv.com/signup/?lang=EN`;
+const WS_URL = `wss://ws.binaryws.com/websockets/v3?app_id=${DERIV_APP_ID}`;
+const SIGNUP_URL = `https://deriv.com/signup/?lang=EN`;
 
-// Deriv requires redirect_uri to be explicit and match exactly what is
-// registered in the Deriv API dashboard for app_id 129077.
-// Registered URI: https://dev-utility-hub--apexricky20.replit.app/callback
-const REDIRECT_URI = "https://dev-utility-hub--apexricky20.replit.app/callback";
-const OAUTH_URL    = `https://oauth.deriv.com/oauth2/authorize?app_id=${OAUTH_APP_ID}&l=EN&brand=deriv&redirect_uri=${encodeURIComponent(REDIRECT_URI)}`;
+// FIX: Use root URL instead of /callback path.
+// Replit SPAs cannot serve sub-paths like /callback — Deriv must redirect
+// back to the root, where React is actually running. The acct1 param that
+// Deriv appends is what App.tsx uses to detect the OAuth callback.
+const REDIRECT_URI = "https://dev-utility-hub--apexricky20.replit.app/";
+const OAUTH_URL = `https://oauth.deriv.com/oauth2/authorize?app_id=${OAUTH_APP_ID}&l=EN&brand=deriv&redirect_uri=${encodeURIComponent(REDIRECT_URI)}`;
 const TOKEN_KEY = "deriv_token";
 const ACCOUNTS_KEY = "tradex-deriv-accounts";
 
@@ -56,11 +62,14 @@ const AuthContext = createContext<AuthState>({
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [accounts, setAccounts] = useState<DerivAccount[]>(() => {
-    try { return JSON.parse(localStorage.getItem(ACCOUNTS_KEY) || "[]"); }
-    catch { return []; }
+    try {
+      return JSON.parse(localStorage.getItem(ACCOUNTS_KEY) || "[]");
+    } catch {
+      return [];
+    }
   });
   const [activeAccount, setActiveAccount] = useState<DerivAccount | null>(
-    () => accounts[0] ?? null
+    () => accounts[0] ?? null,
   );
   const [isAuthorized, setIsAuthorized] = useState(false);
   const [balance, setBalance] = useState<number | null>(null);
@@ -89,7 +98,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     ws.onopen = () => {
       if (!mountedRef.current) return;
       setWsConnected(true);
-      // Step 1: Authorize with token
       ws.send(JSON.stringify({ authorize: token }));
     };
 
@@ -103,23 +111,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           case "authorize": {
             setIsAuthorized(true);
             const info = msg.authorize;
-            // Update active account with real data
-            setActiveAccount(prev => prev ? {
-              ...prev,
-              account: info.loginid || prev.account,
-              currency: info.currency || prev.currency,
-            } : null);
+            setActiveAccount((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    account: info.loginid || prev.account,
+                    currency: info.currency || prev.currency,
+                  }
+                : null,
+            );
             setCurrency(info.currency || "USD");
-            // Step 2: Subscribe to balance
-            ws.send(JSON.stringify({ balance: 1, account: "current", subscribe: 1 }));
-            // Step 3: Fetch statement
+            ws.send(
+              JSON.stringify({ balance: 1, account: "current", subscribe: 1 }),
+            );
             ws.send(JSON.stringify({ statement: 1, limit: 50 }));
-            // Step 4: Fetch active symbols
-            ws.send(JSON.stringify({ active_symbols: "brief", product_type: "basic" }));
-            // Step 5: Subscribe to ticks for Analysis Tool
+            ws.send(
+              JSON.stringify({
+                active_symbols: "brief",
+                product_type: "basic",
+              }),
+            );
             ws.send(JSON.stringify({ ticks: "R_10", subscribe: 1 }));
-            // Step 6: Fetch trading durations for Quick Strategy
-            ws.send(JSON.stringify({ trading_durations: 1, underlying: "R_100", contract_type: "ALL" }));
+            ws.send(
+              JSON.stringify({
+                trading_durations: 1,
+                underlying: "R_100",
+                contract_type: "ALL",
+              }),
+            );
             break;
           }
           case "balance": {
@@ -139,7 +158,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!mountedRef.current) return;
       setWsConnected(false);
       setIsAuthorized(false);
-      // Auto-reconnect after 4 seconds if still logged in
       const storedToken = localStorage.getItem(TOKEN_KEY);
       if (storedToken) {
         reconnectRef.current = setTimeout(() => connect(storedToken), 4000);
@@ -147,7 +165,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  // Connect on mount if token exists
   useEffect(() => {
     mountedRef.current = true;
     const token = localStorage.getItem(TOKEN_KEY);
@@ -161,8 +178,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const login  = () => { window.location.href = OAUTH_URL;  };
-  const signup = () => { window.location.href = SIGNUP_URL; };
+  const login = () => {
+    window.location.href = OAUTH_URL;
+  };
+  const signup = () => {
+    window.location.href = SIGNUP_URL;
+  };
 
   const logout = () => {
     sendWS({ logout: 1 });
@@ -185,20 +206,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{
-      isLoggedIn: accounts.length > 0,
-      isAuthorized,
-      activeAccount,
-      accounts,
-      balance,
-      currency,
-      wsConnected,
-      login,
-      signup,
-      logout,
-      switchAccount,
-      sendWS,
-    }}>
+    <AuthContext.Provider
+      value={{
+        isLoggedIn: accounts.length > 0,
+        isAuthorized,
+        activeAccount,
+        accounts,
+        balance,
+        currency,
+        wsConnected,
+        login,
+        signup,
+        logout,
+        switchAccount,
+        sendWS,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

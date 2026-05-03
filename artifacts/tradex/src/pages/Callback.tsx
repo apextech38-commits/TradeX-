@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { OAUTH_APP_ID } from "@/context/AuthContext";
 
-const TOKEN_KEY    = "deriv_token";
+const TOKEN_KEY = "deriv_token";
 const ACCOUNTS_KEY = "tradex-deriv-accounts";
 
 // Must match exactly what is registered in the Deriv API dashboard for app_id 129077.
-const REDIRECT_URI = "https://dev-utility-hub--apexricky20.replit.app/callback";
+const REDIRECT_URI = "https://dev-utility-hub--apexricky20.replit.app/";
 function buildOAuthUrl(): string {
   return `https://oauth.deriv.com/oauth2/authorize?app_id=${OAUTH_APP_ID}&l=EN&brand=deriv&redirect_uri=${encodeURIComponent(REDIRECT_URI)}`;
 }
@@ -16,13 +16,14 @@ interface ParseResult {
 }
 
 function parseCallback(): ParseResult {
-  const params    = new URLSearchParams(window.location.search);
-  const accounts  = [];
+  const params = new URLSearchParams(window.location.search);
+  const accounts = [];
   let errorReason: string | null = null;
 
   if (!params.has("acct1")) {
     const allKeys = Array.from(params.keys()).join(", ") || "(none)";
-    errorReason = `No account parameters found in the redirect URL. Received params: ${allKeys}. ` +
+    errorReason =
+      `No account parameters found in the redirect URL. Received params: ${allKeys}. ` +
       `Expected: acct1, token1, cur1. ` +
       `Check that App ID ${OAUTH_APP_ID} has redirect URI correctly registered in the Deriv developer console.`;
     console.error("[TradeX Callback]", errorReason);
@@ -31,14 +32,16 @@ function parseCallback(): ParseResult {
 
   let i = 1;
   while (params.has(`acct${i}`)) {
-    const account  = params.get(`acct${i}`)  || "";
-    const token    = params.get(`token${i}`) || "";
-    const currency = params.get(`cur${i}`)   || "USD";
+    const account = params.get(`acct${i}`) || "";
+    const token = params.get(`token${i}`) || "";
+    const currency = params.get(`cur${i}`) || "USD";
 
     if (!account) {
       console.warn(`[TradeX Callback] acct${i} is empty — skipping`);
     } else if (!token) {
-      console.warn(`[TradeX Callback] token${i} is empty for account ${account} — skipping`);
+      console.warn(
+        `[TradeX Callback] token${i} is empty for account ${account} — skipping`,
+      );
     } else {
       accounts.push({ account, token, currency });
     }
@@ -46,7 +49,8 @@ function parseCallback(): ParseResult {
   }
 
   if (accounts.length === 0) {
-    errorReason = `Account parameters were present but all tokens were empty (received ${i - 1} account entries). ` +
+    errorReason =
+      `Account parameters were present but all tokens were empty (received ${i - 1} account entries). ` +
       `This can happen if Deriv revoked access for App ID ${OAUTH_APP_ID}.`;
     console.error("[TradeX Callback]", errorReason);
   }
@@ -61,8 +65,10 @@ function goHome() {
 }
 
 export default function Callback() {
-  const [status,      setStatus]      = useState<"processing" | "success" | "error">("processing");
-  const [message,     setMessage]     = useState("Processing your login...");
+  const [status, setStatus] = useState<"processing" | "success" | "error">(
+    "processing",
+  );
+  const [message, setMessage] = useState("Processing your login...");
   const [errorDetail, setErrorDetail] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -77,12 +83,17 @@ export default function Callback() {
     }
 
     try {
-      localStorage.setItem(TOKEN_KEY,    accounts[0].token);
+      localStorage.setItem(TOKEN_KEY, accounts[0].token);
       localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts));
     } catch (e) {
-      console.error("[TradeX Callback] Failed to save tokens to localStorage:", e);
+      console.error(
+        "[TradeX Callback] Failed to save tokens to localStorage:",
+        e,
+      );
       setStatus("error");
-      setMessage("Could not save your session. Your browser may be blocking storage.");
+      setMessage(
+        "Could not save your session. Your browser may be blocking storage.",
+      );
       setErrorDetail(String(e));
       return;
     }
@@ -93,9 +104,10 @@ export default function Callback() {
       window.history.replaceState(null, "", BASE);
     } catch (_) {}
 
-    const label = accounts.length > 1
-      ? `${accounts.length} accounts connected`
-      : `${accounts[0].account} (${accounts[0].currency})`;
+    const label =
+      accounts.length > 1
+        ? `${accounts.length} accounts connected`
+        : `${accounts[0].account} (${accounts[0].currency})`;
 
     console.info("[TradeX Callback] Login successful:", label);
     setStatus("success");
@@ -117,11 +129,12 @@ export default function Callback() {
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-4">
       <div className="bg-card border border-border rounded-2xl p-8 max-w-sm w-full shadow-2xl text-center space-y-5">
-
         {/* Logo */}
         <div className="flex items-start justify-center gap-1 mb-2">
           <span className="text-2xl font-bold text-primary">TradeX</span>
-          <span className="text-[10px] font-bold mt-1 px-1 py-[1px] rounded bg-[#FACC15]/20 text-[#FACC15]">PRO</span>
+          <span className="text-[10px] font-bold mt-1 px-1 py-[1px] rounded bg-[#FACC15]/20 text-[#FACC15]">
+            PRO
+          </span>
         </div>
 
         {/* Status icon */}
@@ -131,15 +144,35 @@ export default function Callback() {
           )}
           {status === "success" && (
             <div className="w-16 h-16 rounded-full bg-[#22C55E]/10 border-2 border-[#22C55E] flex items-center justify-center">
-              <svg className="w-8 h-8 text-[#22C55E]" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              <svg
+                className="w-8 h-8 text-[#22C55E]"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M5 13l4 4L19 7"
+                />
               </svg>
             </div>
           )}
           {status === "error" && (
             <div className="w-16 h-16 rounded-full bg-[#EF4444]/10 border-2 border-[#EF4444] flex items-center justify-center">
-              <svg className="w-8 h-8 text-[#EF4444]" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              <svg
+                className="w-8 h-8 text-[#EF4444]"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M6 18L18 6M6 6l12 12"
+                />
               </svg>
             </div>
           )}
@@ -148,8 +181,11 @@ export default function Callback() {
         {/* Title + message */}
         <div>
           <h1 className="text-xl font-bold text-foreground mb-1">
-            {status === "processing" ? "Connecting to Deriv" :
-             status === "success"    ? "Login Successful"    : "Login Failed"}
+            {status === "processing"
+              ? "Connecting to Deriv"
+              : status === "success"
+                ? "Login Successful"
+                : "Login Failed"}
           </h1>
           <p className="text-sm text-muted-foreground">{message}</p>
         </div>
