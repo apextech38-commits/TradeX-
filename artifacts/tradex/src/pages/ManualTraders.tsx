@@ -5,7 +5,7 @@ import {
 } from "lucide-react";
 import { DERIV_APP_ID, OAUTH_APP_ID } from "@/context/AuthContext";
 import { useAuth } from "@/context/AuthContext";
-import DerivSmartChart from "@/components/DerivSmartChart";
+import LightweightChart from "@/components/LightweightChart";
 
 const WS_URL        = `wss://ws.binaryws.com/websockets/v3?app_id=${DERIV_APP_ID}`;
 const PING_INTERVAL = 25_000;
@@ -19,23 +19,18 @@ const mk = (id: string, label: string, badge: string): Market => ({ id, label, b
 
 const COMMODITIES_BASKET: Market[] = [mk("WLDGOLD", "Gold Basket", "GLD")];
 const FOREX_BASKET: Market[] = [
-  mk("WLDAUD", "AUD Basket", "AUD"),mk("WLDEUR", "EUR Basket", "EUR"),
-  mk("WLDGBP", "GBP Basket", "GBP"),mk("WLDUSD", "USD Basket", "USD"),
+  mk("WLDAUD","AUD Basket","AUD"),mk("WLDEUR","EUR Basket","EUR"),
+  mk("WLDGBP","GBP Basket","GBP"),mk("WLDUSD","USD Basket","USD"),
 ];
 const CONTINUOUS: Market[] = [
-  mk("1HZ10V",  "Volatility 10 (1s) Index",  "10"),
-  mk("R_10",    "Volatility 10 Index",        "10"),
-  mk("1HZ25V",  "Volatility 25 (1s) Index",  "25"),
-  mk("R_25",    "Volatility 25 Index",        "25"),
-  mk("1HZ50V",  "Volatility 50 (1s) Index",  "50"),
-  mk("R_50",    "Volatility 50 Index",        "50"),
-  mk("1HZ75V",  "Volatility 75 (1s) Index",  "75"),
-  mk("R_75",    "Volatility 75 Index",        "75"),
-  mk("1HZ100V", "Volatility 100 (1s) Index", "100"),
-  mk("R_100",   "Volatility 100 Index",       "100"),
-  mk("1HZ150V", "Volatility 150 (1s) Index", "150"),
-  mk("1HZ200V", "Volatility 200 (1s) Index", "200"),
-  mk("1HZ250V", "Volatility 250 (1s) Index", "250"),
+  mk("1HZ10V","Volatility 10 (1s) Index","10"),mk("R_10","Volatility 10 Index","10"),
+  mk("1HZ25V","Volatility 25 (1s) Index","25"),mk("R_25","Volatility 25 Index","25"),
+  mk("1HZ50V","Volatility 50 (1s) Index","50"),mk("R_50","Volatility 50 Index","50"),
+  mk("1HZ75V","Volatility 75 (1s) Index","75"),mk("R_75","Volatility 75 Index","75"),
+  mk("1HZ100V","Volatility 100 (1s) Index","100"),mk("R_100","Volatility 100 Index","100"),
+  mk("1HZ150V","Volatility 150 (1s) Index","150"),
+  mk("1HZ200V","Volatility 200 (1s) Index","200"),
+  mk("1HZ250V","Volatility 250 (1s) Index","250"),
 ];
 const CRASH_BOOM: Market[] = [
   mk("BOOM300N","Boom 300 Index","B300"),mk("BOOM500N","Boom 500 Index","B500"),
@@ -176,7 +171,7 @@ function MarketsBottomSheet({ selected, onSelect, onClose }: {
   return (
     <div className="fixed inset-0 z-50 flex items-end">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <div className="relative w-full bg-white rounded-t-3xl shadow-2xl flex flex-col" style={{ height: "95vh" }}>
+      <div className="relative w-full bg-white rounded-t-3xl shadow-2xl flex flex-col" style={{ height: "90vh" }}>
         <div className="flex items-center justify-between px-5 py-4 border-b border-[#E5E7EB] shrink-0">
           <h2 className="text-base font-bold text-[#1A1A1A]">Markets</h2>
           <button onClick={onClose} className="p-1 text-[#6B7280] hover:text-[#1A1A1A]"><X className="w-5 h-5" /></button>
@@ -259,12 +254,6 @@ function TradeTypesBottomSheet({ selected, onSelect, onClose }: {
           <h2 className="text-base font-bold text-[#1A1A1A]">Trade Types</h2>
           <button onClick={onClose} className="p-1 text-[#6B7280] hover:text-[#1A1A1A]"><X className="w-5 h-5" /></button>
         </div>
-        <div className="px-4 py-3 border-b border-[#E5E7EB] shrink-0">
-          <button className="flex items-center gap-2 text-sm text-[#6B7280]">
-            <span>Learn more about trade types</span>
-            <ChevronRight className="w-4 h-4" />
-          </button>
-        </div>
         <div className="overflow-y-auto flex-1 pb-4">
           {categories.map(cat => {
             const types = TRADE_TYPES.filter(t => t.category === cat);
@@ -308,20 +297,20 @@ function TradeTypesBottomSheet({ selected, onSelect, onClose }: {
 export default function ManualTraders() {
   const { isLoggedIn } = useAuth();
 
-  const [sym, setSym]                     = useState<Market>(DEFAULT_MKT);
-  const [showMarkets, setShowMarkets]     = useState(false);
+  const [sym, setSym]                       = useState<Market>(DEFAULT_MKT);
+  const [showMarkets, setShowMarkets]       = useState(false);
   const [showTradeTypes, setShowTradeTypes] = useState(false);
-  const [price, setPrice]                 = useState<number | null>(null);
-  const [prevPrice, setPrevPrice]         = useState<number | null>(null);
-  const [connStatus, setConnStatus]       = useState<"connecting" | "live" | "error">("connecting");
+  const [price, setPrice]                   = useState<number | null>(null);
+  const [prevPrice, setPrevPrice]           = useState<number | null>(null);
+  const [connStatus, setConnStatus]         = useState<"connecting"|"live"|"error">("connecting");
 
-  const [tradeTypeId, setTradeTypeId] = useState("accumulators");
-  const [stake, setStake]             = useState(10);
-  const [stakeInput, setStakeInput]   = useState("10");
-  const [growthRate, setGrowthRate]   = useState(3);
+  const [tradeTypeId, setTradeTypeId]   = useState("accumulators");
+  const [stake, setStake]               = useState(10);
+  const [stakeInput, setStakeInput]     = useState("10");
+  const [growthRate, setGrowthRate]     = useState(3);
   const [takeProfitOn, setTakeProfitOn] = useState(false);
-  const [takeProfit, setTakeProfit]   = useState("");
-  const [buyStatus, setBuyStatus]     = useState<string | null>(null);
+  const [takeProfit, setTakeProfit]     = useState("");
+  const [buyStatus, setBuyStatus]       = useState<string | null>(null);
 
   const wsRef    = useRef<WebSocket | null>(null);
   const mountRef = useRef(true);
@@ -347,13 +336,7 @@ export default function ManualTraders() {
 
     ws.onopen = () => {
       if (!mountRef.current) return;
-      ws.send(JSON.stringify({
-        ticks_history: symRef.current,
-        count: 10,
-        end: "latest",
-        style: "ticks",
-        subscribe: 1,
-      }));
+      ws.send(JSON.stringify({ ticks_history: symRef.current, count: 10, end: "latest", style: "ticks", subscribe: 1 }));
       pingRef.current = setInterval(() => {
         if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ ping: 1 }));
       }, PING_INTERVAL);
@@ -363,25 +346,14 @@ export default function ManualTraders() {
       if (!mountRef.current) return;
       try {
         const msg = JSON.parse(evt.data);
-        if (msg.error) {
-          ws.onclose = null; ws.close(); clearTimers();
-          setConnStatus("error");
-          retryRef.current = setTimeout(connect, RETRY_DELAY);
-          return;
-        }
+        if (msg.error) { ws.onclose = null; ws.close(); clearTimers(); setConnStatus("error"); retryRef.current = setTimeout(connect, RETRY_DELAY); return; }
         if (msg.msg_type === "pong") return;
-
         if (msg.msg_type === "history") {
           const { prices } = msg.history as { prices: number[] };
-          if (prices.length > 0) {
-            const last = prices[prices.length - 1];
-            const prev = prices.length > 1 ? prices[prices.length - 2] : last;
-            setPrice(last); setPrevPrice(prev);
-          }
+          if (prices.length > 0) { const last = prices[prices.length - 1]; const prev = prices.length > 1 ? prices[prices.length - 2] : last; setPrice(last); setPrevPrice(prev); }
           setConnStatus("live");
           if (msg.subscription?.id) subIdRef.current = msg.subscription.id;
         }
-
         if (msg.msg_type === "tick") {
           if (msg.subscription?.id) subIdRef.current = msg.subscription.id;
           const quote: number = msg.tick.quote;
@@ -392,31 +364,19 @@ export default function ManualTraders() {
     };
 
     ws.onerror = () => { if (mountRef.current) setConnStatus("error"); };
-    ws.onclose = () => {
-      if (!mountRef.current) return;
-      clearTimers(); setConnStatus("error");
-      retryRef.current = setTimeout(connect, RETRY_DELAY);
-    };
+    ws.onclose = () => { if (!mountRef.current) return; clearTimers(); setConnStatus("error"); retryRef.current = setTimeout(connect, RETRY_DELAY); };
   }, [clearTimers]);
 
   useEffect(() => {
     mountRef.current = true;
     const prevId = symRef.current;
     symRef.current = sym.id;
-
     if (wsRef.current?.readyState === WebSocket.OPEN && subIdRef.current && prevId !== sym.id) {
       wsRef.current.send(JSON.stringify({ forget: subIdRef.current }));
     }
-
-    setPrice(null); setPrevPrice(null);
-    setConnStatus("connecting");
+    setPrice(null); setPrevPrice(null); setConnStatus("connecting");
     connect();
-
-    return () => {
-      mountRef.current = false;
-      clearTimers();
-      if (wsRef.current) { wsRef.current.onclose = null; wsRef.current.close(); }
-    };
+    return () => { mountRef.current = false; clearTimers(); if (wsRef.current) { wsRef.current.onclose = null; wsRef.current.close(); } };
   }, [sym.id, connect, clearTimers]);
 
   const tradeTypeMeta = TRADE_TYPES.find(t => t.id === tradeTypeId) || TRADE_TYPES[0];
@@ -426,50 +386,29 @@ export default function ManualTraders() {
   const maxPayout     = (stake * 6000 / 10).toFixed(2);
   const maxTicks      = 85;
 
-  const connDot =
-    connStatus === "live"  ? "bg-[#22C55E]" :
-    connStatus === "error" ? "bg-[#EF4444] animate-pulse" :
-                             "bg-[#F59E0B] animate-pulse";
+  const connDot = connStatus === "live" ? "bg-[#22C55E]" : connStatus === "error" ? "bg-[#EF4444] animate-pulse" : "bg-[#F59E0B] animate-pulse";
 
   const handleBuy = () => {
     if (!isLoggedIn) { window.location.href = LOGIN_URL; return; }
     const token = localStorage.getItem("deriv_token");
     if (!token) { setBuyStatus("No token — please log in"); return; }
-
     setBuyStatus("Placing...");
     const buyWs = new WebSocket(WS_URL);
-
     buyWs.onopen = () => { buyWs.send(JSON.stringify({ authorize: token })); };
-
     buyWs.onmessage = (evt) => {
       try {
         const msg = JSON.parse(evt.data);
         if (msg.error) { setBuyStatus(`Error: ${msg.error.message}`); buyWs.close(); return; }
         if (msg.msg_type === "authorize") {
           const tp = takeProfitOn && takeProfit ? parseFloat(takeProfit) : undefined;
-          const params: Record<string, unknown> = {
-            amount: stake, basis: "stake",
-            contract_type: tradeTypeId === "accumulators" ? "ACCU" :
-              tradeTypeId === "rise_fall" ? "CALL" :
-              tradeTypeId === "multipliers" ? "MULTUP" : "CALL",
-            currency: "USD",
-            symbol: sym.id,
-            growth_rate: tradeTypeId === "accumulators" ? growthRate / 100 : undefined,
-          };
+          const params: Record<string, unknown> = { amount: stake, basis: "stake", contract_type: tradeTypeId === "accumulators" ? "ACCU" : tradeTypeId === "rise_fall" ? "CALL" : tradeTypeId === "multipliers" ? "MULTUP" : "CALL", currency: "USD", symbol: sym.id, growth_rate: tradeTypeId === "accumulators" ? growthRate / 100 : undefined };
           if (tp) params.limit_order = { take_profit: tp };
           buyWs.send(JSON.stringify({ proposal: 1, subscribe: 0, ...params }));
         }
-        if (msg.msg_type === "proposal") {
-          buyWs.send(JSON.stringify({ buy: msg.proposal.id, price: stake }));
-        }
-        if (msg.msg_type === "buy") {
-          setBuyStatus(`✓ Open — #${msg.buy.contract_id}`);
-          buyWs.close();
-          setTimeout(() => setBuyStatus(null), 4000);
-        }
+        if (msg.msg_type === "proposal") { buyWs.send(JSON.stringify({ buy: msg.proposal.id, price: stake })); }
+        if (msg.msg_type === "buy") { setBuyStatus(`✓ Open — #${msg.buy.contract_id}`); buyWs.close(); setTimeout(() => setBuyStatus(null), 4000); }
       } catch (_) {}
     };
-
     buyWs.onerror = () => { setBuyStatus("WS error"); };
   };
 
@@ -478,184 +417,138 @@ export default function ManualTraders() {
   };
 
   return (
-    <div className="flex flex-col min-h-[calc(100vh-80px)] bg-[#F4F6FA]">
+    /* Outer: fills the viewport between navbar (80px) and bottom bar (52px) */
+    <div className="flex flex-col bg-[#F4F6FA]" style={{ height: "calc(100dvh - 132px)" }}>
 
       {showMarkets && (
-        <MarketsBottomSheet
-          selected={sym}
-          onSelect={s => { setSym(s); }}
-          onClose={() => setShowMarkets(false)}
-        />
+        <MarketsBottomSheet selected={sym} onSelect={s => setSym(s)} onClose={() => setShowMarkets(false)} />
       )}
       {showTradeTypes && (
-        <TradeTypesBottomSheet
-          selected={tradeTypeId}
-          onSelect={id => setTradeTypeId(id)}
-          onClose={() => setShowTradeTypes(false)}
-        />
+        <TradeTypesBottomSheet selected={tradeTypeId} onSelect={id => setTradeTypeId(id)} onClose={() => setShowTradeTypes(false)} />
       )}
 
-      {/* ── Market selector card ─────────────────────────────────────────────── */}
-      <button
-        onClick={() => setShowMarkets(true)}
-        className="mx-3 mt-3 bg-white border border-[#E5E7EB] rounded-2xl shadow-sm p-4 flex items-center gap-3 active:scale-[0.99] transition-transform"
-      >
-        <div className="w-12 h-12 rounded-xl bg-[#1E90FF]/10 flex items-center justify-center shrink-0">
-          <CandlestickChart className="w-6 h-6 text-[#1E90FF]" />
-        </div>
-        <div className="flex-1 text-left min-w-0">
-          <div className="text-base font-bold text-[#1A1A1A] truncate">{sym.label}</div>
-          {price != null ? (
-            <div className="flex items-center gap-1.5 mt-0.5">
-              <span className={`text-sm font-mono font-bold ${priceUp === false ? "text-[#EF4444]" : "text-[#22C55E]"}`}>
-                {price.toFixed(dp)}
-              </span>
-              {priceChange != null && prevPrice != null && (
-                <span className={`text-xs ${priceUp === false ? "text-[#EF4444]" : "text-[#22C55E]"}`}>
-                  {priceChange >= 0 ? "+" : ""}{priceChange.toFixed(dp)}
-                  {" "}({Math.abs(priceChange / prevPrice * 100).toFixed(2)}%)
-                  {" "}{priceUp === false ? "▼" : "▲"}
-                </span>
-              )}
-            </div>
-          ) : (
-            <div className="text-xs text-[#9CA3AF] mt-0.5 flex items-center gap-1">
-              <span className={`w-1.5 h-1.5 rounded-full ${connDot}`} />
-              Connecting…
-            </div>
-          )}
-        </div>
-        <ChevronDown className="w-5 h-5 text-[#6B7280] shrink-0" />
-      </button>
+      {/* Scrollable content inside the fixed-height container */}
+      <div className="flex-1 overflow-y-auto">
 
-      {/* ── Deriv SmartChart ─────────────────────────────────────────────────── */}
-      <div className="mx-3 mt-2 bg-white border border-[#E5E7EB] rounded-2xl shadow-sm overflow-hidden" style={{ height: 320 }}>
-        <DerivSmartChart symbol={sym.id} height={320} isMobile={true} />
-      </div>
-
-      {/* ── Trade panel ──────────────────────────────────────────────────────── */}
-      <div className="mx-3 mt-2 bg-white border border-[#E5E7EB] rounded-2xl shadow-sm overflow-hidden mb-3">
-
-        <button className="w-full flex items-center gap-2 px-4 py-3 border-b border-[#E5E7EB] hover:bg-[#F4F6FA] transition-colors">
-          <CandlestickChart className="w-4 h-4 text-[#1E90FF]" />
-          <span className="text-sm text-[#1E90FF] font-medium">Learn about this trade type</span>
-          <ChevronRight className="w-4 h-4 text-[#1E90FF] ml-auto" />
-        </button>
-
+        {/* Market selector card */}
         <button
-          onClick={() => setShowTradeTypes(true)}
-          className="w-full flex items-center gap-3 px-4 py-3 border-b border-[#E5E7EB] hover:bg-[#F4F6FA] transition-colors"
+          onClick={() => setShowMarkets(true)}
+          className="mx-3 mt-3 w-[calc(100%-24px)] bg-white border border-[#E5E7EB] rounded-2xl shadow-sm p-3 flex items-center gap-3 active:scale-[0.99] transition-transform"
         >
-          <div className="w-8 h-8 rounded-lg bg-[#1E90FF]/10 flex items-center justify-center shrink-0">
-            <tradeTypeMeta.Icon className="w-4 h-4 text-[#1E90FF]" />
+          <div className="w-10 h-10 rounded-xl bg-[#1E90FF]/10 flex items-center justify-center shrink-0">
+            <CandlestickChart className="w-5 h-5 text-[#1E90FF]" />
           </div>
-          <span className="text-sm font-bold text-[#1A1A1A] flex-1 text-left">{tradeTypeMeta.label}</span>
-          {tradeTypeMeta.badge && (
-            <span className="px-1.5 py-0.5 text-[10px] font-bold bg-[#22C55E] text-white rounded mr-1">
-              {tradeTypeMeta.badge}
-            </span>
-          )}
-          {tradeTypeId === "accumulators" && (
-            <div className="flex items-center gap-1 mr-1">
-              {[1, 2, 3, 4, 5].map(r => (
-                <button
-                  key={r}
-                  onClick={e => { e.stopPropagation(); setGrowthRate(r); }}
-                  className={`w-7 h-7 text-xs font-bold rounded-full transition-colors ${
-                    growthRate === r ? "bg-[#1E90FF] text-white" : "bg-[#F4F6FA] text-[#6B7280] hover:bg-[#E5E7EB]"
-                  }`}
-                >
-                  {r}%
-                </button>
-              ))}
-            </div>
-          )}
-          <Info className="w-4 h-4 text-[#9CA3AF]" />
-          <ChevronRight className="w-4 h-4 text-[#9CA3AF]" />
+          <div className="flex-1 text-left min-w-0">
+            <div className="text-sm font-bold text-[#1A1A1A] truncate">{sym.label}</div>
+            {price != null ? (
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className={`text-sm font-mono font-bold ${priceUp === false ? "text-[#EF4444]" : "text-[#22C55E]"}`}>
+                  {price.toFixed(dp)}
+                </span>
+                {priceChange != null && prevPrice != null && (
+                  <span className={`text-xs ${priceUp === false ? "text-[#EF4444]" : "text-[#22C55E]"}`}>
+                    {priceChange >= 0 ? "+" : ""}{priceChange.toFixed(dp)} {priceUp === false ? "▼" : "▲"}
+                  </span>
+                )}
+              </div>
+            ) : (
+              <div className="text-xs text-[#9CA3AF] mt-0.5 flex items-center gap-1">
+                <span className={`w-1.5 h-1.5 rounded-full ${connDot}`} />
+                Connecting…
+              </div>
+            )}
+          </div>
+          <ChevronDown className="w-5 h-5 text-[#6B7280] shrink-0" />
         </button>
 
-        <div className="flex items-center gap-3 px-4 py-3 border-b border-[#E5E7EB]">
-          <button
-            onClick={() => adjustStake(-1)}
-            className="w-9 h-9 rounded-full bg-[#F4F6FA] border border-[#E5E7EB] flex items-center justify-center text-[#1A1A1A] text-xl font-bold hover:bg-[#E5E7EB] transition-colors shrink-0"
-          >
-            −
-          </button>
-          <div className="flex-1 text-center">
-            <input
-              type="number"
-              value={stakeInput}
-              onChange={e => {
-                setStakeInput(e.target.value);
-                const n = parseFloat(e.target.value);
-                if (!isNaN(n) && n >= 1) setStake(n);
-              }}
-              onBlur={() => {
-                const n = parseFloat(stakeInput);
-                if (isNaN(n) || n < 1) { setStake(1); setStakeInput("1"); }
-                else { setStake(n); setStakeInput(String(n)); }
-              }}
-              className="w-full text-center text-2xl font-bold text-[#1A1A1A] border-none outline-none bg-transparent"
-              min={1} step={1}
-            />
-          </div>
-          <button
-            onClick={() => adjustStake(1)}
-            className="w-9 h-9 rounded-full bg-[#F4F6FA] border border-[#E5E7EB] flex items-center justify-center text-[#1A1A1A] text-xl font-bold hover:bg-[#E5E7EB] transition-colors shrink-0"
-          >
-            +
-          </button>
-          <span className="text-sm text-[#9CA3AF] font-medium shrink-0 w-12 text-right">Stake</span>
+        {/* Chart — fixed 260px height */}
+        <div className="mx-3 mt-2 bg-white border border-[#E5E7EB] rounded-2xl shadow-sm overflow-hidden" style={{ height: 260 }}>
+          <LightweightChart symbol={sym.id} />
         </div>
 
-        <div className="border-b border-[#E5E7EB]">
-          <div className="flex items-center gap-3 px-4 py-3">
-            <button
-              onClick={() => setTakeProfitOn(v => !v)}
-              className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${
-                takeProfitOn ? "bg-[#1E90FF] border-[#1E90FF]" : "border-[#D1D5DB] bg-white"
-              }`}
-            >
-              {takeProfitOn && <span className="text-white text-xs font-bold">✓</span>}
-            </button>
-            <span className="flex-1 text-sm font-bold text-[#1A1A1A]">Take profit</span>
-            <Info className="w-4 h-4 text-[#9CA3AF]" />
-          </div>
-          {takeProfitOn && (
-            <div className="px-4 pb-3">
+        {/* Trade panel */}
+        <div className="mx-3 mt-2 mb-3 bg-white border border-[#E5E7EB] rounded-2xl shadow-sm overflow-hidden">
+
+          {/* Trade type row */}
+          <button
+            onClick={() => setShowTradeTypes(true)}
+            className="w-full flex items-center gap-3 px-4 py-3 border-b border-[#E5E7EB] hover:bg-[#F4F6FA] transition-colors"
+          >
+            <div className="w-8 h-8 rounded-lg bg-[#1E90FF]/10 flex items-center justify-center shrink-0">
+              <tradeTypeMeta.Icon className="w-4 h-4 text-[#1E90FF]" />
+            </div>
+            <span className="text-sm font-bold text-[#1A1A1A] flex-1 text-left">{tradeTypeMeta.label}</span>
+            {tradeTypeMeta.badge && (
+              <span className="px-1.5 py-0.5 text-[10px] font-bold bg-[#22C55E] text-white rounded mr-1">{tradeTypeMeta.badge}</span>
+            )}
+            {tradeTypeId === "accumulators" && (
+              <div className="flex items-center gap-1 mr-1">
+                {[1, 2, 3, 4, 5].map(r => (
+                  <button
+                    key={r}
+                    onClick={e => { e.stopPropagation(); setGrowthRate(r); }}
+                    className={`w-7 h-7 text-xs font-bold rounded-full transition-colors ${growthRate === r ? "bg-[#1E90FF] text-white" : "bg-[#F4F6FA] text-[#6B7280] hover:bg-[#E5E7EB]"}`}
+                  >
+                    {r}%
+                  </button>
+                ))}
+              </div>
+            )}
+            <ChevronRight className="w-4 h-4 text-[#9CA3AF]" />
+          </button>
+
+          {/* Stake */}
+          <div className="flex items-center gap-3 px-4 py-3 border-b border-[#E5E7EB]">
+            <button onClick={() => adjustStake(-1)} className="w-9 h-9 rounded-full bg-[#F4F6FA] border border-[#E5E7EB] flex items-center justify-center text-xl font-bold hover:bg-[#E5E7EB] transition-colors shrink-0">−</button>
+            <div className="flex-1 text-center">
               <input
-                type="number"
-                value={takeProfit}
-                onChange={e => setTakeProfit(e.target.value)}
-                placeholder="Enter take profit amount"
-                className="w-full border border-[#E5E7EB] rounded-lg px-3 py-2 text-sm text-[#1A1A1A] outline-none focus:border-[#1E90FF] bg-[#F4F6FA]"
-                min={0} step={0.01}
+                type="number" value={stakeInput}
+                onChange={e => { setStakeInput(e.target.value); const n = parseFloat(e.target.value); if (!isNaN(n) && n >= 1) setStake(n); }}
+                onBlur={() => { const n = parseFloat(stakeInput); if (isNaN(n) || n < 1) { setStake(1); setStakeInput("1"); } else { setStake(n); setStakeInput(String(n)); } }}
+                className="w-full text-center text-2xl font-bold text-[#1A1A1A] border-none outline-none bg-transparent"
+                min={1} step={1}
               />
             </div>
-          )}
-        </div>
+            <button onClick={() => adjustStake(1)} className="w-9 h-9 rounded-full bg-[#F4F6FA] border border-[#E5E7EB] flex items-center justify-center text-xl font-bold hover:bg-[#E5E7EB] transition-colors shrink-0">+</button>
+            <span className="text-sm text-[#9CA3AF] font-medium shrink-0 w-10 text-right">Stake</span>
+          </div>
 
-        <div className="flex items-center justify-between px-4 py-3 border-b border-[#E5E7EB]">
-          <span className="text-sm text-[#9CA3AF]">Max. payout</span>
-          <span className="text-sm font-bold text-[#1A1A1A] underline underline-offset-2">
-            {Number(maxPayout) > 6000 ? "6,000.00" : parseFloat(maxPayout).toFixed(2)} USD
-          </span>
-        </div>
+          {/* Take profit */}
+          <div className="border-b border-[#E5E7EB]">
+            <div className="flex items-center gap-3 px-4 py-3">
+              <button onClick={() => setTakeProfitOn(v => !v)} className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${takeProfitOn ? "bg-[#1E90FF] border-[#1E90FF]" : "border-[#D1D5DB] bg-white"}`}>
+                {takeProfitOn && <span className="text-white text-xs font-bold">✓</span>}
+              </button>
+              <span className="flex-1 text-sm font-bold text-[#1A1A1A]">Take profit</span>
+              <Info className="w-4 h-4 text-[#9CA3AF]" />
+            </div>
+            {takeProfitOn && (
+              <div className="px-4 pb-3">
+                <input type="number" value={takeProfit} onChange={e => setTakeProfit(e.target.value)} placeholder="Enter take profit amount" className="w-full border border-[#E5E7EB] rounded-lg px-3 py-2 text-sm text-[#1A1A1A] outline-none focus:border-[#1E90FF] bg-[#F4F6FA]" min={0} step={0.01} />
+              </div>
+            )}
+          </div>
 
-        <div className="flex items-center justify-between px-4 py-3 border-b border-[#E5E7EB]">
-          <span className="text-sm text-[#9CA3AF]">Max. ticks</span>
-          <span className="text-sm font-bold text-[#1A1A1A] underline underline-offset-2">{maxTicks} ticks</span>
-        </div>
+          {/* Stats */}
+          <div className="flex items-center justify-between px-4 py-2.5 border-b border-[#E5E7EB]">
+            <span className="text-sm text-[#9CA3AF]">Max. payout</span>
+            <span className="text-sm font-bold text-[#1A1A1A]">{Number(maxPayout) > 6000 ? "6,000.00" : parseFloat(maxPayout).toFixed(2)} USD</span>
+          </div>
+          <div className="flex items-center justify-between px-4 py-2.5 border-b border-[#E5E7EB]">
+            <span className="text-sm text-[#9CA3AF]">Max. ticks</span>
+            <span className="text-sm font-bold text-[#1A1A1A]">{maxTicks} ticks</span>
+          </div>
 
-        <div className="p-0">
+          {/* Buy button */}
           <button
             onClick={handleBuy}
-            className="w-full h-14 bg-[#1E90FF] hover:bg-[#1a7fe0] active:bg-[#1670c8] text-white font-bold text-base flex items-center justify-center gap-2 transition-colors rounded-b-2xl"
+            className="w-full h-14 bg-[#1E90FF] hover:bg-[#1a7fe0] active:bg-[#1670c8] text-white font-bold text-base flex items-center justify-center gap-2 transition-colors"
           >
             <TrendingUp className="w-5 h-5" />
             {buyStatus ?? "Buy"}
           </button>
         </div>
+
       </div>
     </div>
   );

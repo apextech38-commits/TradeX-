@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { X, Search, Star, CandlestickChart, ChevronDown, ChevronRight } from "lucide-react";
-import DerivSmartChart from "@/components/DerivSmartChart";
+import LightweightChart from "@/components/LightweightChart";
 
 interface Market { id: string; label: string; badge: string }
 const mk = (id: string, label: string, badge: string): Market => ({ id, label, badge });
@@ -138,7 +138,7 @@ function MarketsBottomSheet({ selected, onSelect, onClose }: {
   return (
     <div className="fixed inset-0 z-50 flex items-end">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <div className="relative w-full bg-white rounded-t-3xl shadow-2xl flex flex-col" style={{ height: "95vh" }}>
+      <div className="relative w-full bg-white rounded-t-3xl shadow-2xl flex flex-col" style={{ height: "90vh" }}>
         <div className="flex items-center justify-between px-5 py-4 border-b border-[#E5E7EB] shrink-0">
           <h2 className="text-base font-bold text-[#1A1A1A]">Markets</h2>
           <button onClick={onClose} className="p-1 text-[#6B7280] hover:text-[#1A1A1A]"><X className="w-5 h-5" /></button>
@@ -214,7 +214,8 @@ export default function Charts() {
   const [showModal, setModal] = useState(false);
 
   return (
-    <div className="flex flex-col h-[calc(100vh-80px)] bg-[#F4F6FA]">
+    /* 80 px navbar + 52 px bottom bar = 132 px consumed */
+    <div className="flex flex-col bg-[#F4F6FA]" style={{ height: "calc(100dvh - 132px)" }}>
 
       {showModal && (
         <MarketsBottomSheet
@@ -224,24 +225,24 @@ export default function Charts() {
         />
       )}
 
-      {/* ── Market selector ─────────────────────────────────────────────────── */}
+      {/* Market selector */}
       <button
         onClick={() => setModal(true)}
-        className="mx-3 mt-3 bg-white border border-[#E5E7EB] rounded-2xl shadow-sm p-4 flex items-center gap-3 active:scale-[0.99] transition-transform shrink-0"
+        className="mx-3 mt-3 shrink-0 bg-white border border-[#E5E7EB] rounded-2xl shadow-sm p-3 flex items-center gap-3 active:scale-[0.99] transition-transform"
       >
-        <div className="w-12 h-12 rounded-xl bg-[#1E90FF]/10 flex items-center justify-center shrink-0">
-          <CandlestickChart className="w-6 h-6 text-[#1E90FF]" />
+        <div className="w-10 h-10 rounded-xl bg-[#1E90FF]/10 flex items-center justify-center shrink-0">
+          <CandlestickChart className="w-5 h-5 text-[#1E90FF]" />
         </div>
         <div className="flex-1 text-left min-w-0">
-          <div className="text-base font-bold text-[#1A1A1A] truncate">{sym.label}</div>
-          <div className="text-xs text-[#6B7280] mt-0.5 font-mono">{sym.id}</div>
+          <div className="text-sm font-bold text-[#1A1A1A] truncate">{sym.label}</div>
+          <div className="text-xs text-[#6B7280] font-mono">{sym.id}</div>
         </div>
         <ChevronDown className="w-5 h-5 text-[#6B7280] shrink-0" />
       </button>
 
-      {/* ── Deriv SmartChart ─────────────────────────────────────────────────── */}
-      <div className="mx-3 mt-2 mb-2 bg-white border border-[#E5E7EB] rounded-2xl shadow-sm overflow-hidden flex-1">
-        <DerivSmartChart symbol={sym.id} height="100%" isMobile={false} />
+      {/* Chart — fills all remaining vertical space */}
+      <div className="mx-3 mt-2 mb-2 flex-1 min-h-0 bg-white border border-[#E5E7EB] rounded-2xl shadow-sm overflow-hidden">
+        <LightweightChart symbol={sym.id} />
       </div>
 
     </div>

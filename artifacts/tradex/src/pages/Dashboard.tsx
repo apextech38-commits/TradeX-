@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import {
-  Bot, TrendingUp, BarChart2, Brain, Layers, Users, Eye,
-  Zap, ArrowRight, Wifi, WifiOff, LogIn, Clock, TrendingDown,
+  Wifi, WifiOff, LogIn, Clock, TrendingUp, TrendingDown,
+  Bot, BarChart2, Brain, Layers, Users, Zap, Eye, ArrowRight,
 } from "lucide-react";
 import { LineChart, Line, ResponsiveContainer } from "recharts";
 import { useAuth } from "@/context/AuthContext";
@@ -341,44 +341,6 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* ── Feature cards ──────────────────────────────────────────── */}
-        <div>
-          <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-3">
-            Quick Access
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {FEATURES.map(f => {
-              const Icon = f.icon;
-              return (
-                <button
-                  key={f.id}
-                  onClick={() => navigate(f.id)}
-                  className={`group text-left bg-card border rounded-xl p-4 transition-all hover:shadow-md active:scale-[0.98] ${
-                    f.highlight
-                      ? `${f.border} ring-1 ring-primary/20`
-                      : `border-border hover:border-primary/30`
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className={`w-9 h-9 rounded-lg ${f.bg} flex items-center justify-center shrink-0`}>
-                      <Icon className="w-5 h-5" style={{ color: f.color }}/>
-                    </div>
-                    {f.highlight && (
-                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-primary/10 text-primary uppercase tracking-wider shrink-0">
-                        Featured
-                      </span>
-                    )}
-                    <ArrowRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity ml-auto shrink-0 mt-0.5"/>
-                  </div>
-                  <div className="mt-3">
-                    <div className="text-sm font-semibold text-foreground mb-1">{f.title}</div>
-                    <div className="text-xs text-muted-foreground leading-relaxed line-clamp-2">{f.desc}</div>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
 
       </div>
     </div>
