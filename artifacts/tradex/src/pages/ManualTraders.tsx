@@ -1,36 +1,26 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import {
-  LineChart, Line, YAxis, CartesianGrid, ReferenceLine, ResponsiveContainer,
-} from "recharts";
-import {
   TrendingUp, BarChart2, Zap, Hash, ArrowUpDown, Layers, CircleDot,
   Info, X, Search, Star, ChevronDown, ChevronRight, CandlestickChart,
 } from "lucide-react";
 import { DERIV_APP_ID, OAUTH_APP_ID } from "@/context/AuthContext";
 import { useAuth } from "@/context/AuthContext";
+import DerivSmartChart from "@/components/DerivSmartChart";
 
-// ── Config ─────────────────────────────────────────────────────────────────────
 const WS_URL        = `wss://ws.binaryws.com/websockets/v3?app_id=${DERIV_APP_ID}`;
 const PING_INTERVAL = 25_000;
 const RETRY_DELAY   = 3_000;
-const MAX_TICKS     = 120;
 const REDIRECT_URI  = "https://dev-utility-hub--apexricky20.replit.app/callback";
 const LOGIN_URL     = `https://oauth.deriv.com/oauth2/authorize?app_id=${OAUTH_APP_ID}&l=EN&brand=deriv&redirect_uri=${encodeURIComponent(REDIRECT_URI)}`;
 const FAV_KEY       = "tradex-fav-markets";
 
-// ── Market data ────────────────────────────────────────────────────────────────
 interface Market { id: string; label: string; badge: string }
-
 const mk = (id: string, label: string, badge: string): Market => ({ id, label, badge });
 
-const COMMODITIES_BASKET: Market[] = [
-  mk("WLDGOLD", "Gold Basket", "GLD"),
-];
+const COMMODITIES_BASKET: Market[] = [mk("WLDGOLD", "Gold Basket", "GLD")];
 const FOREX_BASKET: Market[] = [
-  mk("WLDAUD", "AUD Basket", "AUD"),
-  mk("WLDEUR", "EUR Basket", "EUR"),
-  mk("WLDGBP", "GBP Basket", "GBP"),
-  mk("WLDUSD", "USD Basket", "USD"),
+  mk("WLDAUD", "AUD Basket", "AUD"),mk("WLDEUR", "EUR Basket", "EUR"),
+  mk("WLDGBP", "GBP Basket", "GBP"),mk("WLDUSD", "USD Basket", "USD"),
 ];
 const CONTINUOUS: Market[] = [
   mk("1HZ10V",  "Volatility 10 (1s) Index",  "10"),
@@ -48,96 +38,56 @@ const CONTINUOUS: Market[] = [
   mk("1HZ250V", "Volatility 250 (1s) Index", "250"),
 ];
 const CRASH_BOOM: Market[] = [
-  mk("BOOM300N",   "Boom 300 Index",   "B300"),
-  mk("BOOM500N",   "Boom 500 Index",   "B500"),
-  mk("BOOM600N",   "Boom 600 Index",   "B600"),
-  mk("BOOM900N",   "Boom 900 Index",   "B900"),
-  mk("BOOM1000N",  "Boom 1000 Index",  "B1K"),
-  mk("CRASH300N",  "Crash 300 Index",  "C300"),
-  mk("CRASH500N",  "Crash 500 Index",  "C500"),
-  mk("CRASH600N",  "Crash 600 Index",  "C600"),
-  mk("CRASH900N",  "Crash 900 Index",  "C900"),
-  mk("CRASH1000N", "Crash 1000 Index", "C1K"),
+  mk("BOOM300N","Boom 300 Index","B300"),mk("BOOM500N","Boom 500 Index","B500"),
+  mk("BOOM600N","Boom 600 Index","B600"),mk("BOOM900N","Boom 900 Index","B900"),
+  mk("BOOM1000N","Boom 1000 Index","B1K"),
+  mk("CRASH300N","Crash 300 Index","C300"),mk("CRASH500N","Crash 500 Index","C500"),
+  mk("CRASH600N","Crash 600 Index","C600"),mk("CRASH900N","Crash 900 Index","C900"),
+  mk("CRASH1000N","Crash 1000 Index","C1K"),
 ];
-const DAILY_RESET: Market[] = [
-  mk("BRMIDX", "Bear Market Index", "BEAR"),
-  mk("BULIDX", "Bull Market Index", "BULL"),
-];
+const DAILY_RESET: Market[] = [mk("BRMIDX","Bear Market Index","BEAR"),mk("BULIDX","Bull Market Index","BULL")];
 const JUMP: Market[] = [
-  mk("JD10",  "Jump 10 Index",  "J10"),
-  mk("JD25",  "Jump 25 Index",  "J25"),
-  mk("JD50",  "Jump 50 Index",  "J50"),
-  mk("JD75",  "Jump 75 Index",  "J75"),
-  mk("JD100", "Jump 100 Index", "J100"),
+  mk("JD10","Jump 10 Index","J10"),mk("JD25","Jump 25 Index","J25"),
+  mk("JD50","Jump 50 Index","J50"),mk("JD75","Jump 75 Index","J75"),
+  mk("JD100","Jump 100 Index","J100"),
 ];
-const RANGE_BREAK: Market[] = [
-  mk("RB100", "Range Break 100 Index", "RB100"),
-  mk("RB200", "Range Break 200 Index", "RB200"),
-];
+const RANGE_BREAK: Market[] = [mk("RB100","Range Break 100 Index","RB100"),mk("RB200","Range Break 200 Index","RB200")];
 const STEP: Market[] = [
-  mk("stpRNG100", "Step Index 100", "S100"),
-  mk("stpRNG200", "Step Index 200", "S200"),
-  mk("stpRNG300", "Step Index 300", "S300"),
-  mk("stpRNG400", "Step Index 400", "S400"),
-  mk("stpRNG500", "Step Index 500", "S500"),
+  mk("stpRNG100","Step Index 100","S100"),mk("stpRNG200","Step Index 200","S200"),
+  mk("stpRNG300","Step Index 300","S300"),mk("stpRNG400","Step Index 400","S400"),
+  mk("stpRNG500","Step Index 500","S500"),
 ];
 const MAJOR_PAIRS: Market[] = [
-  mk("frxAUDJPY", "AUD/JPY", "AUDJPY"),
-  mk("frxAUDUSD", "AUD/USD", "AUDUSD"),
-  mk("frxEURAUD", "EUR/AUD", "EURAUD"),
-  mk("frxEURCAD", "EUR/CAD", "EURCAD"),
-  mk("frxEURCHF", "EUR/CHF", "EURCHF"),
-  mk("frxEURGBP", "EUR/GBP", "EURGBP"),
-  mk("frxEURJPY", "EUR/JPY", "EURJPY"),
-  mk("frxEURUSD", "EUR/USD", "EURUSD"),
-  mk("frxGBPAUD", "GBP/AUD", "GBPAUD"),
-  mk("frxGBPJPY", "GBP/JPY", "GBPJPY"),
-  mk("frxGBPUSD", "GBP/USD", "GBPUSD"),
-  mk("frxUSDCAD", "USD/CAD", "USDCAD"),
-  mk("frxUSDCHF", "USD/CHF", "USDCHF"),
-  mk("frxUSDJPY", "USD/JPY", "USDJPY"),
+  mk("frxAUDJPY","AUD/JPY","AUDJPY"),mk("frxAUDUSD","AUD/USD","AUDUSD"),
+  mk("frxEURAUD","EUR/AUD","EURAUD"),mk("frxEURCAD","EUR/CAD","EURCAD"),
+  mk("frxEURCHF","EUR/CHF","EURCHF"),mk("frxEURGBP","EUR/GBP","EURGBP"),
+  mk("frxEURJPY","EUR/JPY","EURJPY"),mk("frxEURUSD","EUR/USD","EURUSD"),
+  mk("frxGBPAUD","GBP/AUD","GBPAUD"),mk("frxGBPJPY","GBP/JPY","GBPJPY"),
+  mk("frxGBPUSD","GBP/USD","GBPUSD"),mk("frxUSDCAD","USD/CAD","USDCAD"),
+  mk("frxUSDCHF","USD/CHF","USDCHF"),mk("frxUSDJPY","USD/JPY","USDJPY"),
 ];
 const MINOR_PAIRS: Market[] = [
-  mk("frxAUDCHF", "AUD/CHF", "AUDCHF"),
-  mk("frxAUDNZD", "AUD/NZD", "AUDNZD"),
-  mk("frxEURNZD", "EUR/NZD", "EURNZD"),
-  mk("frxGBPCAD", "GBP/CAD", "GBPCAD"),
-  mk("frxGBPCHF", "GBP/CHF", "GBPCHF"),
-  mk("frxGBPNZD", "GBP/NZD", "GBPNZD"),
-  mk("frxNZDJPY", "NZD/JPY", "NZDJPY"),
-  mk("frxNZDUSD", "NZD/USD", "NZDUSD"),
-  mk("frxUSDMXN", "USD/MXN", "USDMXN"),
-  mk("frxUSDNOK", "USD/NOK", "USDNOK"),
-  mk("frxUSDPLN", "USD/PLN", "USDPLN"),
-  mk("frxUSDSEK", "USD/SEK", "USDSEK"),
+  mk("frxAUDCHF","AUD/CHF","AUDCHF"),mk("frxAUDNZD","AUD/NZD","AUDNZD"),
+  mk("frxEURNZD","EUR/NZD","EURNZD"),mk("frxGBPCAD","GBP/CAD","GBPCAD"),
+  mk("frxGBPCHF","GBP/CHF","GBPCHF"),mk("frxGBPNZD","GBP/NZD","GBPNZD"),
+  mk("frxNZDJPY","NZD/JPY","NZDJPY"),mk("frxNZDUSD","NZD/USD","NZDUSD"),
+  mk("frxUSDMXN","USD/MXN","USDMXN"),mk("frxUSDNOK","USD/NOK","USDNOK"),
+  mk("frxUSDPLN","USD/PLN","USDPLN"),mk("frxUSDSEK","USD/SEK","USDSEK"),
 ];
 const AMERICAN_INDICES: Market[] = [
-  mk("SPC",       "US 500",        "US500"),
-  mk("USTECH100", "US Tech 100",   "NAS"),
-  mk("DJI",       "Wall Street 30","DJ30"),
+  mk("SPC","US 500","US500"),mk("USTECH100","US Tech 100","NAS"),mk("DJI","Wall Street 30","DJ30"),
 ];
 const ASIAN_INDICES: Market[] = [
-  mk("AS51", "Australia 200", "AUS200"),
-  mk("HSI",  "Hong Kong 50",  "HK50"),
-  mk("N225", "Japan 225",     "JPN225"),
+  mk("AS51","Australia 200","AUS200"),mk("HSI","Hong Kong 50","HK50"),mk("N225","Japan 225","JPN225"),
 ];
 const EUROPEAN_INDICES: Market[] = [
-  mk("STOXX50E","Europe 50",      "EU50"),
-  mk("CAC",     "France 40",      "FR40"),
-  mk("GER40",   "Germany 40",     "GER40"),
-  mk("AEX",     "Netherlands 25", "NL25"),
-  mk("SMI",     "Swiss 20",       "CH20"),
-  mk("UK100",   "UK 100",         "UK100"),
+  mk("STOXX50E","Europe 50","EU50"),mk("CAC","France 40","FR40"),mk("GER40","Germany 40","GER40"),
+  mk("AEX","Netherlands 25","NL25"),mk("SMI","Swiss 20","CH20"),mk("UK100","UK 100","UK100"),
 ];
-const CRYPTOS: Market[] = [
-  mk("cryBTCUSD", "BTC/USD", "BTC"),
-  mk("cryETHUSD", "ETH/USD", "ETH"),
-];
+const CRYPTOS: Market[] = [mk("cryBTCUSD","BTC/USD","BTC"),mk("cryETHUSD","ETH/USD","ETH")];
 const METALS: Market[] = [
-  mk("frxXAUAUD", "Gold/AUD",     "XAUAUD"),
-  mk("frxXAUUSD", "Gold/USD",     "XAUUSD"),
-  mk("frxXPDUSD", "Palladium/USD","XPDUSD"),
-  mk("frxXPTUSD", "Platinum/USD", "XPTUSD"),
+  mk("frxXAUAUD","Gold/AUD","XAUAUD"),mk("frxXAUUSD","Gold/USD","XAUUSD"),
+  mk("frxXPDUSD","Palladium/USD","XPDUSD"),mk("frxXPTUSD","Platinum/USD","XPTUSD"),
 ];
 
 const MARKET_GROUPS = [
@@ -161,7 +111,6 @@ const MARKET_GROUPS = [
 const ALL_MARKETS = MARKET_GROUPS.flatMap(g => g.items);
 const DEFAULT_MKT = CONTINUOUS.find(m => m.id === "1HZ100V")!;
 
-// ── Trade types ────────────────────────────────────────────────────────────────
 interface TradeType {
   id: string; label: string; badge?: string;
   Icon: React.ComponentType<{ className?: string }>;
@@ -169,37 +118,18 @@ interface TradeType {
 }
 
 const TRADE_TYPES: TradeType[] = [
-  { id: "accumulators", label: "Accumulators", badge: "NEW!", Icon: TrendingUp,   category: "ACCUMULATORS" },
-  { id: "call_put",     label: "Call / Put",   badge: "NEW!", Icon: BarChart2,    category: "VANILLAS" },
-  { id: "turbos",       label: "Long / Short", badge: "NEW!", Icon: Zap,          category: "TURBOS" },
-  { id: "multipliers",  label: "Multipliers",              Icon: ArrowUpDown,   category: "MULTIPLIERS" },
-  { id: "rise_fall",    label: "Rise / Fall",              Icon: TrendingUp,    category: "UPS & DOWNS" },
-  { id: "higher_lower", label: "Higher / Lower",           Icon: ArrowUpDown,   category: "UPS & DOWNS" },
-  { id: "touch",        label: "Touch / No Touch",         Icon: CircleDot,     category: "TOUCH & NO TOUCH" },
-  { id: "matches",      label: "Matches / Differs",        Icon: Hash,          category: "DIGITS" },
-  { id: "even_odd",     label: "Even / Odd",               Icon: Hash,          category: "DIGITS" },
-  { id: "over_under",   label: "Over / Under",             Icon: Layers,        category: "DIGITS" },
+  { id: "accumulators", label: "Accumulators", badge: "NEW!", Icon: TrendingUp,  category: "ACCUMULATORS" },
+  { id: "call_put",     label: "Call / Put",   badge: "NEW!", Icon: BarChart2,   category: "VANILLAS" },
+  { id: "turbos",       label: "Long / Short", badge: "NEW!", Icon: Zap,         category: "TURBOS" },
+  { id: "multipliers",  label: "Multipliers",              Icon: ArrowUpDown,  category: "MULTIPLIERS" },
+  { id: "rise_fall",    label: "Rise / Fall",              Icon: TrendingUp,   category: "UPS & DOWNS" },
+  { id: "higher_lower", label: "Higher / Lower",           Icon: ArrowUpDown,  category: "UPS & DOWNS" },
+  { id: "touch",        label: "Touch / No Touch",         Icon: CircleDot,    category: "TOUCH & NO TOUCH" },
+  { id: "matches",      label: "Matches / Differs",        Icon: Hash,         category: "DIGITS" },
+  { id: "even_odd",     label: "Even / Odd",               Icon: Hash,         category: "DIGITS" },
+  { id: "over_under",   label: "Over / Under",             Icon: Layers,       category: "DIGITS" },
 ];
 
-// ── Price pill SVG ─────────────────────────────────────────────────────────────
-const PricePill = (props: any) => {
-  const { viewBox, displayValue } = props;
-  if (!viewBox) return null;
-  const { x, y, width } = viewBox;
-  const pw = 82, ph = 22, pr = 11;
-  const bx = x + width + 6;
-  return (
-    <g>
-      <rect x={bx} y={y - ph / 2} width={pw} height={ph} rx={pr} ry={pr} fill="#1A1A1A" />
-      <text x={bx + pw / 2} y={y + 4.5} textAnchor="middle" fill="#fff"
-        fontSize={11} fontWeight="bold" fontFamily="monospace">
-        {displayValue}
-      </text>
-    </g>
-  );
-};
-
-// ── Markets bottom sheet ───────────────────────────────────────────────────────
 function MarketsBottomSheet({ selected, onSelect, onClose }: {
   selected: Market; onSelect: (m: Market) => void; onClose: () => void;
 }) {
@@ -218,19 +148,16 @@ function MarketsBottomSheet({ selected, onSelect, onClose }: {
     });
   };
 
-  const q           = query.trim().toLowerCase();
-  const filtered    = q ? ALL_MARKETS.filter(m => m.label.toLowerCase().includes(q) || m.id.toLowerCase().includes(q)) : null;
-  const favMarkets  = ALL_MARKETS.filter(m => favIds.includes(m.id));
+  const q          = query.trim().toLowerCase();
+  const filtered   = q ? ALL_MARKETS.filter(m => m.label.toLowerCase().includes(q) || m.id.toLowerCase().includes(q)) : null;
+  const favMarkets = ALL_MARKETS.filter(m => favIds.includes(m.id));
 
   const MarketRow = ({ m, color }: { m: Market; color?: string }) => (
     <button
       onClick={() => { onSelect(m); onClose(); }}
       className="w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-[#F4F6FA] transition-colors"
     >
-      <button
-        onClick={e => toggleFav(m.id, e)}
-        className="shrink-0"
-      >
+      <button onClick={e => toggleFav(m.id, e)} className="shrink-0">
         <Star className={`w-4 h-4 transition-colors ${
           favIds.includes(m.id) ? "text-[#1E90FF] fill-[#1E90FF]" : "text-[#D1D5DB] hover:text-[#1E90FF]"
         }`} />
@@ -242,9 +169,7 @@ function MarketsBottomSheet({ selected, onSelect, onClose }: {
         {m.badge.length > 4 ? m.badge.slice(0, 4) : m.badge}
       </div>
       <span className="flex-1 text-left text-[#1A1A1A] font-medium truncate">{m.label}</span>
-      {m.id === selected.id && (
-        <span className="w-2 h-2 rounded-full bg-[#1E90FF] shrink-0" />
-      )}
+      {m.id === selected.id && <span className="w-2 h-2 rounded-full bg-[#1E90FF] shrink-0" />}
     </button>
   );
 
@@ -252,36 +177,21 @@ function MarketsBottomSheet({ selected, onSelect, onClose }: {
     <div className="fixed inset-0 z-50 flex items-end">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
       <div className="relative w-full bg-white rounded-t-3xl shadow-2xl flex flex-col" style={{ height: "95vh" }}>
-
-        {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-[#E5E7EB] shrink-0">
           <h2 className="text-base font-bold text-[#1A1A1A]">Markets</h2>
-          <button onClick={onClose} className="p-1 text-[#6B7280] hover:text-[#1A1A1A]">
-            <X className="w-5 h-5" />
-          </button>
+          <button onClick={onClose} className="p-1 text-[#6B7280] hover:text-[#1A1A1A]"><X className="w-5 h-5" /></button>
         </div>
-
-        {/* Search */}
         <div className="px-4 py-3 border-b border-[#E5E7EB] shrink-0">
           <div className="flex items-center gap-2 bg-[#F4F6FA] border border-[#E5E7EB] rounded-full px-4 py-2.5">
             <Search className="w-4 h-4 text-[#9CA3AF] shrink-0" />
             <input
-              autoFocus
-              type="text"
-              placeholder="Search markets…"
-              value={query}
-              onChange={e => setQuery(e.target.value)}
+              autoFocus type="text" placeholder="Search markets…"
+              value={query} onChange={e => setQuery(e.target.value)}
               className="flex-1 bg-transparent text-sm text-[#1A1A1A] placeholder:text-[#9CA3AF] outline-none"
             />
-            {query && (
-              <button onClick={() => setQuery("")} className="text-[#9CA3AF] hover:text-[#1A1A1A]">
-                <X className="w-4 h-4" />
-              </button>
-            )}
+            {query && <button onClick={() => setQuery("")}><X className="w-4 h-4 text-[#9CA3AF]" /></button>}
           </div>
         </div>
-
-        {/* List */}
         <div className="overflow-y-auto flex-1">
           {filtered ? (
             <>
@@ -298,31 +208,25 @@ function MarketsBottomSheet({ selected, onSelect, onClose }: {
             </>
           ) : (
             <>
-              {/* Favourites */}
               <div className="border-b border-[#E5E7EB]">
                 <button
                   onClick={() => setCollapsed(c => ({ ...c, __favs: !c.__favs }))}
                   className="w-full flex items-center justify-between px-4 py-2.5 bg-[#F4F6FA] hover:bg-[#EAECF0]"
                 >
                   <div className="flex items-center gap-1.5 text-xs font-bold text-[#1E90FF] uppercase tracking-wide">
-                    <Star className="w-3.5 h-3.5 fill-[#1E90FF]" />
-                    Favorites
+                    <Star className="w-3.5 h-3.5 fill-[#1E90FF]" /> Favorites
                   </div>
-                  {collapsed.__favs
-                    ? <ChevronRight className="w-4 h-4 text-[#9CA3AF]" />
-                    : <ChevronDown  className="w-4 h-4 text-[#9CA3AF]" />}
+                  {collapsed.__favs ? <ChevronRight className="w-4 h-4 text-[#9CA3AF]" /> : <ChevronDown className="w-4 h-4 text-[#9CA3AF]" />}
                 </button>
                 {!collapsed.__favs && (
                   favMarkets.length === 0
-                    ? <p className="text-sm text-[#9CA3AF] text-center py-5 italic">There are no favorites yet.</p>
+                    ? <p className="text-sm text-[#9CA3AF] text-center py-5 italic">No favorites yet.</p>
                     : favMarkets.map(m => {
                         const grp = MARKET_GROUPS.find(g => g.items.some(i => i.id === m.id));
                         return <MarketRow key={m.id} m={m} color={grp?.color} />;
                       })
                 )}
               </div>
-
-              {/* All groups */}
               {MARKET_GROUPS.map(g => (
                 <div key={g.label} className="border-b border-[#E5E7EB]">
                   <button
@@ -330,13 +234,9 @@ function MarketsBottomSheet({ selected, onSelect, onClose }: {
                     className="w-full flex items-center justify-between px-4 py-2.5 bg-[#F4F6FA] hover:bg-[#EAECF0]"
                   >
                     <span className="text-xs font-bold text-[#1A1A1A] uppercase tracking-wide">{g.label}</span>
-                    {collapsed[g.label]
-                      ? <ChevronRight className="w-4 h-4 text-[#9CA3AF]" />
-                      : <ChevronDown  className="w-4 h-4 text-[#9CA3AF]" />}
+                    {collapsed[g.label] ? <ChevronRight className="w-4 h-4 text-[#9CA3AF]" /> : <ChevronDown className="w-4 h-4 text-[#9CA3AF]" />}
                   </button>
-                  {!collapsed[g.label] && g.items.map(m => (
-                    <MarketRow key={m.id} m={m} color={g.color} />
-                  ))}
+                  {!collapsed[g.label] && g.items.map(m => <MarketRow key={m.id} m={m} color={g.color} />)}
                 </div>
               ))}
             </>
@@ -347,33 +247,24 @@ function MarketsBottomSheet({ selected, onSelect, onClose }: {
   );
 }
 
-// ── Trade types bottom sheet ───────────────────────────────────────────────────
 function TradeTypesBottomSheet({ selected, onSelect, onClose }: {
   selected: string; onSelect: (id: string) => void; onClose: () => void;
 }) {
   const categories = Array.from(new Set(TRADE_TYPES.map(t => t.category)));
-
   return (
     <div className="fixed inset-0 z-50 flex items-end">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
       <div className="relative w-full bg-white rounded-t-3xl shadow-2xl flex flex-col max-h-[90vh]">
-
-        {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-[#E5E7EB] shrink-0">
           <h2 className="text-base font-bold text-[#1A1A1A]">Trade Types</h2>
-          <button onClick={onClose} className="p-1 text-[#6B7280] hover:text-[#1A1A1A]">
-            <X className="w-5 h-5" />
-          </button>
+          <button onClick={onClose} className="p-1 text-[#6B7280] hover:text-[#1A1A1A]"><X className="w-5 h-5" /></button>
         </div>
-
-        {/* Learn link */}
         <div className="px-4 py-3 border-b border-[#E5E7EB] shrink-0">
           <button className="flex items-center gap-2 text-sm text-[#6B7280]">
             <span>Learn more about trade types</span>
             <ChevronRight className="w-4 h-4" />
           </button>
         </div>
-
         <div className="overflow-y-auto flex-1 pb-4">
           {categories.map(cat => {
             const types = TRADE_TYPES.filter(t => t.category === cat);
@@ -393,21 +284,15 @@ function TradeTypesBottomSheet({ selected, onSelect, onClose }: {
                     <button
                       key={t.id}
                       onClick={() => { onSelect(t.id); onClose(); }}
-                      className={`w-full flex items-center gap-3 px-4 py-3 transition-colors ${
-                        isActive ? "bg-[#E8F4FF]" : "hover:bg-[#F4F6FA]"
-                      }`}
+                      className={`w-full flex items-center gap-3 px-4 py-3 transition-colors ${isActive ? "bg-[#E8F4FF]" : "hover:bg-[#F4F6FA]"}`}
                     >
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
-                        isActive ? "bg-[#1E90FF]" : "bg-[#F4F6FA]"
-                      }`}>
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${isActive ? "bg-[#1E90FF]" : "bg-[#F4F6FA]"}`}>
                         <t.Icon className={`w-4 h-4 ${isActive ? "text-white" : "text-[#6B7280]"}`} />
                       </div>
                       <span className={`flex-1 text-sm font-medium text-left ${isActive ? "text-[#1E90FF]" : "text-[#1A1A1A]"}`}>
                         {t.label}
                       </span>
-                      {isActive && (
-                        <span className="w-2 h-2 rounded-full bg-[#1E90FF] shrink-0" />
-                      )}
+                      {isActive && <span className="w-2 h-2 rounded-full bg-[#1E90FF] shrink-0" />}
                     </button>
                   );
                 })}
@@ -420,48 +305,35 @@ function TradeTypesBottomSheet({ selected, onSelect, onClose }: {
   );
 }
 
-// ── Point type ─────────────────────────────────────────────────────────────────
-type Point = { idx: number; value: number };
-
-// ── Main component ─────────────────────────────────────────────────────────────
 export default function ManualTraders() {
   const { isLoggedIn } = useAuth();
 
-  // Market & chart state
-  const [sym, setSym]               = useState<Market>(DEFAULT_MKT);
-  const [showMarkets, setShowMarkets]    = useState(false);
+  const [sym, setSym]                     = useState<Market>(DEFAULT_MKT);
+  const [showMarkets, setShowMarkets]     = useState(false);
   const [showTradeTypes, setShowTradeTypes] = useState(false);
-  const [points, setPoints]         = useState<Point[]>([]);
-  const [price, setPrice]           = useState<number | null>(null);
-  const [prevPrice, setPrevPrice]   = useState<number | null>(null);
-  const [connStatus, setConnStatus] = useState<"connecting" | "live" | "error">("connecting");
+  const [price, setPrice]                 = useState<number | null>(null);
+  const [prevPrice, setPrevPrice]         = useState<number | null>(null);
+  const [connStatus, setConnStatus]       = useState<"connecting" | "live" | "error">("connecting");
 
-  // Trade state
   const [tradeTypeId, setTradeTypeId] = useState("accumulators");
-  const [stake, setStake]           = useState(10);
-  const [stakeInput, setStakeInput] = useState("10");
-  const [growthRate, setGrowthRate] = useState(3);
+  const [stake, setStake]             = useState(10);
+  const [stakeInput, setStakeInput]   = useState("10");
+  const [growthRate, setGrowthRate]   = useState(3);
   const [takeProfitOn, setTakeProfitOn] = useState(false);
-  const [takeProfit, setTakeProfit] = useState("");
-  const [buyStatus, setBuyStatus]   = useState<string | null>(null);
+  const [takeProfit, setTakeProfit]   = useState("");
+  const [buyStatus, setBuyStatus]     = useState<string | null>(null);
 
-  // WS refs
-  const wsRef      = useRef<WebSocket | null>(null);
-  const mountRef   = useRef(true);
-  const retryRef   = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pingRef    = useRef<ReturnType<typeof setInterval> | null>(null);
-  const symRef     = useRef(sym.id);
-  const subIdRef   = useRef<string | null>(null);
-  const ticksRef   = useRef<{ epoch: number; quote: number }[]>([]);
-  const tickIdxRef = useRef(0);
+  const wsRef    = useRef<WebSocket | null>(null);
+  const mountRef = useRef(true);
+  const retryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pingRef  = useRef<ReturnType<typeof setInterval> | null>(null);
+  const symRef   = useRef(sym.id);
+  const subIdRef = useRef<string | null>(null);
 
   const clearTimers = useCallback(() => {
     if (retryRef.current) { clearTimeout(retryRef.current);  retryRef.current = null; }
     if (pingRef.current)  { clearInterval(pingRef.current);  pingRef.current  = null; }
   }, []);
-
-  const buildPoints = (ticks: { epoch: number; quote: number }[]): Point[] =>
-    ticks.slice(-MAX_TICKS).map((t, i) => ({ idx: i, value: t.quote }));
 
   const connect = useCallback(() => {
     if (!mountRef.current) return;
@@ -477,7 +349,7 @@ export default function ManualTraders() {
       if (!mountRef.current) return;
       ws.send(JSON.stringify({
         ticks_history: symRef.current,
-        count: 100,
+        count: 10,
         end: "latest",
         style: "ticks",
         subscribe: 1,
@@ -500,10 +372,7 @@ export default function ManualTraders() {
         if (msg.msg_type === "pong") return;
 
         if (msg.msg_type === "history") {
-          const { prices, times } = msg.history as { prices: number[]; times: number[] };
-          const ticks = times.map((t, i) => ({ epoch: t, quote: prices[i] }));
-          ticksRef.current = ticks;
-          setPoints(buildPoints(ticks));
+          const { prices } = msg.history as { prices: number[] };
           if (prices.length > 0) {
             const last = prices[prices.length - 1];
             const prev = prices.length > 1 ? prices[prices.length - 2] : last;
@@ -516,12 +385,7 @@ export default function ManualTraders() {
         if (msg.msg_type === "tick") {
           if (msg.subscription?.id) subIdRef.current = msg.subscription.id;
           const quote: number = msg.tick.quote;
-          const epoch: number = msg.tick.epoch;
           setPrice(q => { setPrevPrice(q); return quote; });
-          const next = [...ticksRef.current, { epoch, quote }];
-          if (next.length > MAX_TICKS * 2) next.shift();
-          ticksRef.current = next;
-          setPoints(buildPoints(next));
           setConnStatus("live");
         }
       } catch (_) {}
@@ -544,9 +408,7 @@ export default function ManualTraders() {
       wsRef.current.send(JSON.stringify({ forget: subIdRef.current }));
     }
 
-    ticksRef.current = [];
-    tickIdxRef.current = 0;
-    setPoints([]); setPrice(null); setPrevPrice(null);
+    setPrice(null); setPrevPrice(null);
     setConnStatus("connecting");
     connect();
 
@@ -557,36 +419,27 @@ export default function ManualTraders() {
     };
   }, [sym.id, connect, clearTimers]);
 
-  // ── Derived values ──────────────────────────────────────────────────────────
   const tradeTypeMeta = TRADE_TYPES.find(t => t.id === tradeTypeId) || TRADE_TYPES[0];
   const priceChange   = price != null && prevPrice != null ? price - prevPrice : null;
   const priceUp       = priceChange == null ? null : priceChange >= 0;
   const dp            = price != null ? (price > 100 ? 2 : price > 10 ? 4 : 5) : 2;
+  const maxPayout     = (stake * 6000 / 10).toFixed(2);
+  const maxTicks      = 85;
 
-  const values = points.map(p => p.value);
-  const minV   = values.length ? Math.min(...values) : 0;
-  const maxV   = values.length ? Math.max(...values) : 0;
-  const pad    = ((maxV - minV) * 0.3) || 1;
+  const connDot =
+    connStatus === "live"  ? "bg-[#22C55E]" :
+    connStatus === "error" ? "bg-[#EF4444] animate-pulse" :
+                             "bg-[#F59E0B] animate-pulse";
 
-  // Computed trade info (accumulator)
-  const maxPayout = (stake * 6000 / 10).toFixed(2);
-  const maxTicks  = 85;
-
-  // ── Buy handler ─────────────────────────────────────────────────────────────
   const handleBuy = () => {
-    if (!isLoggedIn) {
-      window.location.href = LOGIN_URL;
-      return;
-    }
+    if (!isLoggedIn) { window.location.href = LOGIN_URL; return; }
     const token = localStorage.getItem("deriv_token");
     if (!token) { setBuyStatus("No token — please log in"); return; }
 
     setBuyStatus("Placing...");
     const buyWs = new WebSocket(WS_URL);
 
-    buyWs.onopen = () => {
-      buyWs.send(JSON.stringify({ authorize: token }));
-    };
+    buyWs.onopen = () => { buyWs.send(JSON.stringify({ authorize: token })); };
 
     buyWs.onmessage = (evt) => {
       try {
@@ -604,7 +457,6 @@ export default function ManualTraders() {
             growth_rate: tradeTypeId === "accumulators" ? growthRate / 100 : undefined,
           };
           if (tp) params.limit_order = { take_profit: tp };
-
           buyWs.send(JSON.stringify({ proposal: 1, subscribe: 0, ...params }));
         }
         if (msg.msg_type === "proposal") {
@@ -621,20 +473,13 @@ export default function ManualTraders() {
     buyWs.onerror = () => { setBuyStatus("WS error"); };
   };
 
-  // ── Stake helpers ────────────────────────────────────────────────────────────
   const adjustStake = (delta: number) => {
     setStake(s => { const n = Math.max(1, s + delta); setStakeInput(String(n)); return n; });
   };
 
-  const connDot =
-    connStatus === "live"  ? "bg-[#22C55E]" :
-    connStatus === "error" ? "bg-[#EF4444] animate-pulse" :
-                             "bg-[#F59E0B] animate-pulse";
-
   return (
     <div className="flex flex-col min-h-[calc(100vh-80px)] bg-[#F4F6FA]">
 
-      {/* Modals */}
       {showMarkets && (
         <MarketsBottomSheet
           selected={sym}
@@ -650,17 +495,14 @@ export default function ManualTraders() {
         />
       )}
 
-      {/* ── Market selector card ───────────────────────────────────────────── */}
+      {/* ── Market selector card ─────────────────────────────────────────────── */}
       <button
         onClick={() => setShowMarkets(true)}
         className="mx-3 mt-3 bg-white border border-[#E5E7EB] rounded-2xl shadow-sm p-4 flex items-center gap-3 active:scale-[0.99] transition-transform"
       >
-        {/* Badge */}
         <div className="w-12 h-12 rounded-xl bg-[#1E90FF]/10 flex items-center justify-center shrink-0">
           <CandlestickChart className="w-6 h-6 text-[#1E90FF]" />
         </div>
-
-        {/* Name + price */}
         <div className="flex-1 text-left min-w-0">
           <div className="text-base font-bold text-[#1A1A1A] truncate">{sym.label}</div>
           {price != null ? (
@@ -683,81 +525,23 @@ export default function ManualTraders() {
             </div>
           )}
         </div>
-
         <ChevronDown className="w-5 h-5 text-[#6B7280] shrink-0" />
       </button>
 
-      {/* ── Chart ─────────────────────────────────────────────────────────────── */}
-      <div className="mx-3 mt-2 bg-white border border-[#E5E7EB] rounded-2xl shadow-sm overflow-hidden relative" style={{ height: 300 }}>
-
-        {/* 1T label bottom-left */}
-        <div className="absolute bottom-3 left-3 z-10 flex items-center gap-1 text-[#9CA3AF] pointer-events-none">
-          <CandlestickChart className="w-3 h-3" />
-          <span className="text-[11px] font-semibold">1 T</span>
-        </div>
-
-        {/* Status dot top-right */}
-        <div className="absolute top-3 right-3 z-10">
-          <span className={`w-2 h-2 rounded-full inline-block ${connDot}`} />
-        </div>
-
-        {points.length < 2 ? (
-          <div className="flex items-center justify-center h-full text-[#9CA3AF] text-sm gap-2">
-            <div className={`w-4 h-4 border-2 rounded-full animate-spin ${
-              connStatus === "error"
-                ? "border-[#EF4444]/30 border-t-[#EF4444]"
-                : "border-[#1E90FF]/30 border-t-[#1E90FF]"
-            }`} />
-            {connStatus === "error" ? "Reconnecting…" : "Loading live feed…"}
-          </div>
-        ) : (
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart
-              data={points}
-              margin={{ top: 10, right: 96, left: 0, bottom: 4 }}
-            >
-              <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" vertical={false} />
-              <YAxis
-                domain={[minV - pad, maxV + pad]}
-                tick={{ fontSize: 10, fill: "#9CA3AF" }}
-                axisLine={false}
-                tickLine={false}
-                width={62}
-                tickFormatter={(v: number) => v.toFixed(dp)}
-              />
-              {price != null && (
-                <ReferenceLine
-                  y={price}
-                  stroke="#1A1A1A"
-                  strokeDasharray="5 3"
-                  strokeWidth={1}
-                  label={<PricePill displayValue={price.toFixed(dp)} />}
-                />
-              )}
-              <Line
-                type="linear"
-                dataKey="value"
-                stroke="#1A1A1A"
-                strokeWidth={1.5}
-                dot={false}
-                isAnimationActive={false}
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        )}
+      {/* ── Deriv SmartChart ─────────────────────────────────────────────────── */}
+      <div className="mx-3 mt-2 bg-white border border-[#E5E7EB] rounded-2xl shadow-sm overflow-hidden" style={{ height: 320 }}>
+        <DerivSmartChart symbol={sym.id} height={320} isMobile={true} />
       </div>
 
-      {/* ── Trade panel ───────────────────────────────────────────────────────── */}
+      {/* ── Trade panel ──────────────────────────────────────────────────────── */}
       <div className="mx-3 mt-2 bg-white border border-[#E5E7EB] rounded-2xl shadow-sm overflow-hidden mb-3">
 
-        {/* Learn row */}
         <button className="w-full flex items-center gap-2 px-4 py-3 border-b border-[#E5E7EB] hover:bg-[#F4F6FA] transition-colors">
           <CandlestickChart className="w-4 h-4 text-[#1E90FF]" />
           <span className="text-sm text-[#1E90FF] font-medium">Learn about this trade type</span>
           <ChevronRight className="w-4 h-4 text-[#1E90FF] ml-auto" />
         </button>
 
-        {/* Trade type selector */}
         <button
           onClick={() => setShowTradeTypes(true)}
           className="w-full flex items-center gap-3 px-4 py-3 border-b border-[#E5E7EB] hover:bg-[#F4F6FA] transition-colors"
@@ -786,12 +570,10 @@ export default function ManualTraders() {
               ))}
             </div>
           )}
-          <span className="text-sm font-bold text-[#1A1A1A]">{tradeTypeId === "accumulators" ? `${growthRate}%` : ""}</span>
           <Info className="w-4 h-4 text-[#9CA3AF]" />
           <ChevronRight className="w-4 h-4 text-[#9CA3AF]" />
         </button>
 
-        {/* Stake row */}
         <div className="flex items-center gap-3 px-4 py-3 border-b border-[#E5E7EB]">
           <button
             onClick={() => adjustStake(-1)}
@@ -814,8 +596,7 @@ export default function ManualTraders() {
                 else { setStake(n); setStakeInput(String(n)); }
               }}
               className="w-full text-center text-2xl font-bold text-[#1A1A1A] border-none outline-none bg-transparent"
-              min={1}
-              step={1}
+              min={1} step={1}
             />
           </div>
           <button
@@ -827,7 +608,6 @@ export default function ManualTraders() {
           <span className="text-sm text-[#9CA3AF] font-medium shrink-0 w-12 text-right">Stake</span>
         </div>
 
-        {/* Take profit row */}
         <div className="border-b border-[#E5E7EB]">
           <div className="flex items-center gap-3 px-4 py-3">
             <button
@@ -849,14 +629,12 @@ export default function ManualTraders() {
                 onChange={e => setTakeProfit(e.target.value)}
                 placeholder="Enter take profit amount"
                 className="w-full border border-[#E5E7EB] rounded-lg px-3 py-2 text-sm text-[#1A1A1A] outline-none focus:border-[#1E90FF] bg-[#F4F6FA]"
-                min={0}
-                step={0.01}
+                min={0} step={0.01}
               />
             </div>
           )}
         </div>
 
-        {/* Max payout */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-[#E5E7EB]">
           <span className="text-sm text-[#9CA3AF]">Max. payout</span>
           <span className="text-sm font-bold text-[#1A1A1A] underline underline-offset-2">
@@ -864,13 +642,11 @@ export default function ManualTraders() {
           </span>
         </div>
 
-        {/* Max ticks */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-[#E5E7EB]">
           <span className="text-sm text-[#9CA3AF]">Max. ticks</span>
           <span className="text-sm font-bold text-[#1A1A1A] underline underline-offset-2">{maxTicks} ticks</span>
         </div>
 
-        {/* Buy button */}
         <div className="p-0">
           <button
             onClick={handleBuy}

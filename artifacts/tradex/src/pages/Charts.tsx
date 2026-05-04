@@ -1,24 +1,11 @@
-import { useState, useEffect, useRef, useCallback } from "react";
-import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, ReferenceLine, ResponsiveContainer,
-} from "recharts";
-import {
-  X, Search, Star, CandlestickChart, ChevronDown, ChevronRight,
-} from "lucide-react";
-import { DERIV_APP_ID } from "@/context/AuthContext";
+import { useState } from "react";
+import { X, Search, Star, CandlestickChart, ChevronDown, ChevronRight } from "lucide-react";
+import DerivSmartChart from "@/components/DerivSmartChart";
 
-// ── WebSocket ──────────────────────────────────────────────────────────────────
-const WS_URL        = `wss://ws.binaryws.com/websockets/v3?app_id=${DERIV_APP_ID}`;
-const RETRY_DELAY   = 3_000;
-const HIST_TIMEOUT  = 10_000;
-const PING_INTERVAL = 25_000;
-const MAX_TICKS     = 500;
-const FAV_KEY       = "tradex-charts-fav-markets";
-
-// ── Market definitions ─────────────────────────────────────────────────────────
 interface Market { id: string; label: string; badge: string }
-
 const mk = (id: string, label: string, badge: string): Market => ({ id, label, badge });
+
+const FAV_KEY = "tradex-charts-fav-markets";
 
 const COMMODITIES_BASKET = [mk("WLDGOLD","Gold Basket","GLD")];
 const FOREX_BASKET = [
@@ -105,25 +92,6 @@ const MARKET_GROUPS = [
 const ALL_MARKETS = MARKET_GROUPS.flatMap(g => g.items);
 const DEFAULT_MKT = CONTINUOUS.find(m => m.id === "R_100")!;
 
-// ── Price pill SVG label ───────────────────────────────────────────────────────
-const PricePill = (props: any) => {
-  const { viewBox, displayValue } = props;
-  if (!viewBox) return null;
-  const { x, y, width } = viewBox;
-  const pw = 82, ph = 22, pr = 11;
-  const bx = x + width + 6;
-  return (
-    <g>
-      <rect x={bx} y={y - ph / 2} width={pw} height={ph} rx={pr} ry={pr} fill="#1A1A1A" />
-      <text x={bx + pw / 2} y={y + 4.5} textAnchor="middle" fill="#fff"
-        fontSize={11} fontWeight="bold" fontFamily="monospace">
-        {displayValue}
-      </text>
-    </g>
-  );
-};
-
-// ── Markets bottom sheet ───────────────────────────────────────────────────────
 function MarketsBottomSheet({ selected, onSelect, onClose }: {
   selected: Market; onSelect: (m: Market) => void; onClose: () => void;
 }) {
@@ -214,7 +182,7 @@ function MarketsBottomSheet({ selected, onSelect, onClose }: {
                 </button>
                 {!collapsed.__favs && (
                   favMarkets.length === 0
-                    ? <p className="text-sm text-[#9CA3AF] text-center py-5 italic">There are no favorites yet.</p>
+                    ? <p className="text-sm text-[#9CA3AF] text-center py-5 italic">No favorites yet.</p>
                     : favMarkets.map(m => {
                         const grp = MARKET_GROUPS.find(g => g.items.some(i => i.id === m.id));
                         return <MarketRow key={m.id} m={m} color={grp?.color} />;
@@ -241,156 +209,9 @@ function MarketsBottomSheet({ selected, onSelect, onClose }: {
   );
 }
 
-// ── Tick type ──────────────────────────────────────────────────────────────────
-type Point = { time: string; value: number };
-
-function fmtTime(epoch: number) {
-  return new Date(epoch * 1000).toLocaleTimeString("en-GB", {
-    hour: "2-digit", minute: "2-digit", second: "2-digit",
-  });
-}
-
-// ── Main component ─────────────────────────────────────────────────────────────
 export default function Charts() {
-  const [sym, setSym]             = useState<Market>(DEFAULT_MKT);
-  const [showModal, setModal]     = useState(false);
-  const [points, setPoints]       = useState<Point[]>([]);
-  const [price, setPrice]         = useState<number | null>(null);
-  const [prevPrice, setPrevPrice] = useState<number | null>(null);
-  const [connStatus, setConnStatus] = useState<"connecting" | "live" | "error">("connecting");
-
-  const wsRef       = useRef<WebSocket | null>(null);
-  const mountRef    = useRef(true);
-  const retryRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const histRef     = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pingRef     = useRef<ReturnType<typeof setInterval> | null>(null);
-  const symRef      = useRef(sym.id);
-  const subIdRef    = useRef<string | null>(null);
-  const allTicksRef = useRef<{ epoch: number; quote: number }[]>([]);
-
-  const clearTimers = useCallback(() => {
-    if (retryRef.current) { clearTimeout(retryRef.current); retryRef.current = null; }
-    if (histRef.current)  { clearTimeout(histRef.current);  histRef.current  = null; }
-    if (pingRef.current)  { clearInterval(pingRef.current); pingRef.current  = null; }
-  }, []);
-
-  const buildPoints = (ticks: { epoch: number; quote: number }[]) =>
-    ticks.slice(-MAX_TICKS).map(t => ({ time: fmtTime(t.epoch), value: t.quote }));
-
-  const connect = useCallback(() => {
-    if (!mountRef.current) return;
-    clearTimers();
-    if (wsRef.current) { wsRef.current.onclose = null; wsRef.current.close(); }
-    subIdRef.current = null;
-
-    const ws = new WebSocket(WS_URL);
-    wsRef.current = ws;
-    setConnStatus("connecting");
-
-    ws.onopen = () => {
-      if (!mountRef.current) return;
-      ws.send(JSON.stringify({
-        ticks_history: symRef.current, count: 100, end: "latest",
-        start: 1, style: "ticks", subscribe: 1,
-      }));
-      histRef.current = setTimeout(() => {
-        if (!mountRef.current) return;
-        ws.onclose = null; ws.close();
-        retryRef.current = setTimeout(connect, RETRY_DELAY);
-      }, HIST_TIMEOUT);
-      pingRef.current = setInterval(() => {
-        if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ ping: 1 }));
-      }, PING_INTERVAL);
-    };
-
-    ws.onmessage = (evt) => {
-      if (!mountRef.current) return;
-      try {
-        const msg = JSON.parse(evt.data);
-        if (msg.error) {
-          ws.onclose = null; ws.close(); clearTimers();
-          setConnStatus("error");
-          retryRef.current = setTimeout(connect, RETRY_DELAY);
-          return;
-        }
-        if (msg.msg_type === "pong") return;
-
-        if (msg.msg_type === "history") {
-          if (histRef.current) { clearTimeout(histRef.current); histRef.current = null; }
-          const { prices, times } = msg.history as { prices: number[]; times: number[] };
-          const ticks = times.map((t, i) => ({ epoch: t, quote: prices[i] }));
-          allTicksRef.current = ticks;
-          setPoints(buildPoints(ticks));
-          if (prices.length > 0) {
-            const last = prices[prices.length - 1];
-            const prev = prices.length > 1 ? prices[prices.length - 2] : last;
-            setPrice(last); setPrevPrice(prev);
-          }
-          setConnStatus("live");
-          if (msg.subscription?.id) subIdRef.current = msg.subscription.id;
-        }
-
-        if (msg.msg_type === "tick") {
-          if (msg.subscription?.id) subIdRef.current = msg.subscription.id;
-          const quote: number = msg.tick.quote;
-          const epoch: number = msg.tick.epoch;
-          setPrice(q => { setPrevPrice(q); return quote; });
-          const next = [...allTicksRef.current, { epoch, quote }];
-          if (next.length > MAX_TICKS * 2) next.shift();
-          allTicksRef.current = next;
-          setPoints(buildPoints(next));
-          setConnStatus("live");
-        }
-      } catch (_) {}
-    };
-
-    ws.onerror = () => { if (mountRef.current) setConnStatus("error"); };
-    ws.onclose = () => {
-      if (!mountRef.current) return;
-      clearTimers(); setConnStatus("error");
-      retryRef.current = setTimeout(connect, RETRY_DELAY);
-    };
-  }, [clearTimers]);
-
-  useEffect(() => {
-    mountRef.current = true;
-    const prevId = symRef.current;
-    symRef.current = sym.id;
-
-    if (wsRef.current?.readyState === WebSocket.OPEN && subIdRef.current && prevId !== sym.id) {
-      wsRef.current.send(JSON.stringify({ forget: subIdRef.current }));
-    }
-
-    allTicksRef.current = [];
-    setPoints([]); setPrice(null); setPrevPrice(null);
-    setConnStatus("connecting");
-    connect();
-
-    return () => {
-      mountRef.current = false;
-      clearTimers();
-      if (wsRef.current) { wsRef.current.onclose = null; wsRef.current.close(); }
-    };
-  }, [sym.id, connect, clearTimers]);
-
-  // ── Derived ────────────────────────────────────────────────────────────────
-  const priceChange = price != null && prevPrice != null ? price - prevPrice : null;
-  const priceUp     = priceChange == null ? null : priceChange >= 0;
-  const dp          = price != null ? (price > 100 ? 2 : price > 10 ? 4 : 5) : 2;
-
-  const values = points.map(p => p.value);
-  const minV   = values.length ? Math.min(...values) : 0;
-  const maxV   = values.length ? Math.max(...values) : 0;
-  const pad    = ((maxV - minV) * 0.25) || 1;
-
-  const connDot =
-    connStatus === "live"  ? "bg-[#22C55E]" :
-    connStatus === "error" ? "bg-[#EF4444] animate-pulse" :
-                             "bg-[#F59E0B] animate-pulse";
-
-  // Tick x-axis: show every Nth label for readability
-  const tickCount = points.length;
-  const xInterval = tickCount <= 20 ? 0 : tickCount <= 50 ? 4 : tickCount <= 100 ? 9 : 19;
+  const [sym, setSym]         = useState<Market>(DEFAULT_MKT);
+  const [showModal, setModal] = useState(false);
 
   return (
     <div className="flex flex-col h-[calc(100vh-80px)] bg-[#F4F6FA]">
@@ -403,7 +224,7 @@ export default function Charts() {
         />
       )}
 
-      {/* ── Market selector card ─────────────────────────────────────────────── */}
+      {/* ── Market selector ─────────────────────────────────────────────────── */}
       <button
         onClick={() => setModal(true)}
         className="mx-3 mt-3 bg-white border border-[#E5E7EB] rounded-2xl shadow-sm p-4 flex items-center gap-3 active:scale-[0.99] transition-transform shrink-0"
@@ -413,101 +234,16 @@ export default function Charts() {
         </div>
         <div className="flex-1 text-left min-w-0">
           <div className="text-base font-bold text-[#1A1A1A] truncate">{sym.label}</div>
-          {price != null ? (
-            <div className="flex items-center gap-1.5 mt-0.5">
-              <span className={`text-sm font-mono font-bold ${priceUp === false ? "text-[#EF4444]" : "text-[#22C55E]"}`}>
-                {price.toFixed(dp)}
-              </span>
-              {priceChange != null && prevPrice != null && (
-                <span className={`text-xs ${priceUp === false ? "text-[#EF4444]" : "text-[#22C55E]"}`}>
-                  {priceChange >= 0 ? "+" : ""}{priceChange.toFixed(dp)}
-                  {" "}({Math.abs(priceChange / prevPrice * 100).toFixed(2)}%)
-                  {" "}{priceUp === false ? "▼" : "▲"}
-                </span>
-              )}
-            </div>
-          ) : (
-            <div className="text-xs text-[#9CA3AF] mt-0.5 flex items-center gap-1">
-              <span className={`w-1.5 h-1.5 rounded-full ${connDot}`} />
-              Connecting…
-            </div>
-          )}
+          <div className="text-xs text-[#6B7280] mt-0.5 font-mono">{sym.id}</div>
         </div>
         <ChevronDown className="w-5 h-5 text-[#6B7280] shrink-0" />
       </button>
 
-      {/* ── Chart ─────────────────────────────────────────────────────────────── */}
-      <div
-        className="mx-3 mt-2 mb-2 bg-white border border-[#E5E7EB] rounded-2xl shadow-sm overflow-hidden relative flex-1"
-        style={{ minHeight: 280 }}
-      >
-        {/* 1T label bottom-left */}
-        <div className="absolute bottom-3 left-3 z-10 flex items-center gap-1 text-[#9CA3AF] pointer-events-none">
-          <CandlestickChart className="w-3 h-3" />
-          <span className="text-[11px] font-semibold">1 T</span>
-        </div>
-
-        {/* Live dot top-right */}
-        <div className="absolute top-3 right-3 z-10 flex items-center gap-1.5">
-          <span className={`w-2 h-2 rounded-full ${connDot}`} />
-          {connStatus === "live" && (
-            <span className="text-[10px] text-[#22C55E] font-semibold">LIVE</span>
-          )}
-        </div>
-
-        {points.length < 2 ? (
-          <div className="flex items-center justify-center h-full text-[#9CA3AF] text-sm gap-2">
-            <div className={`w-4 h-4 border-2 rounded-full animate-spin ${
-              connStatus === "error"
-                ? "border-[#EF4444]/30 border-t-[#EF4444]"
-                : "border-[#1E90FF]/30 border-t-[#1E90FF]"
-            }`} />
-            {connStatus === "error" ? "Reconnecting…" : "Connecting to live feed…"}
-          </div>
-        ) : (
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart
-              data={points}
-              margin={{ top: 12, right: 96, left: 0, bottom: 20 }}
-            >
-              <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" vertical={false} />
-              <XAxis
-                dataKey="time"
-                tick={{ fontSize: 10, fill: "#9CA3AF" }}
-                axisLine={false}
-                tickLine={false}
-                interval={xInterval}
-              />
-              <YAxis
-                orientation="right"
-                domain={[minV - pad, maxV + pad]}
-                tick={{ fontSize: 10, fill: "#9CA3AF" }}
-                axisLine={false}
-                tickLine={false}
-                width={68}
-                tickFormatter={(v: number) => v.toFixed(dp)}
-              />
-              {price != null && (
-                <ReferenceLine
-                  y={price}
-                  stroke="#1A1A1A"
-                  strokeDasharray="5 3"
-                  strokeWidth={1}
-                  label={<PricePill displayValue={price.toFixed(dp)} />}
-                />
-              )}
-              <Line
-                type="linear"
-                dataKey="value"
-                stroke="#1A1A1A"
-                strokeWidth={1.5}
-                dot={false}
-                isAnimationActive={false}
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        )}
+      {/* ── Deriv SmartChart ─────────────────────────────────────────────────── */}
+      <div className="mx-3 mt-2 mb-2 bg-white border border-[#E5E7EB] rounded-2xl shadow-sm overflow-hidden flex-1">
+        <DerivSmartChart symbol={sym.id} height="100%" isMobile={false} />
       </div>
+
     </div>
   );
 }
