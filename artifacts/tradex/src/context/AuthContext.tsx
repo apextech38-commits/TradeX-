@@ -30,6 +30,17 @@ export interface DerivAccount {
   currency: string;
 }
 
+export interface StatementTrade {
+  transaction_id: number;
+  action_type: string;
+  amount: number;
+  balance_after: number;
+  transaction_time: number;
+  shortcode: string | null;
+  contract_id: number | null;
+  pnl: number | null;
+}
+
 interface AuthState {
   isLoggedIn: boolean;
   isAuthorized: boolean;
@@ -38,6 +49,7 @@ interface AuthState {
   balance: number | null;
   currency: string;
   wsConnected: boolean;
+  recentTrades: StatementTrade[];
   login: () => void;
   signup: () => void;
   logout: () => void;
@@ -53,6 +65,7 @@ const AuthContext = createContext<AuthState>({
   balance: null,
   currency: "USD",
   wsConnected: false,
+  recentTrades: [],
   login: () => {},
   signup: () => {},
   logout: () => {},
@@ -75,6 +88,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [balance, setBalance] = useState<number | null>(null);
   const [currency, setCurrency] = useState("USD");
   const [wsConnected, setWsConnected] = useState(false);
+  const [recentTrades, setRecentTrades] = useState<StatementTrade[]>([]);
 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -146,6 +160,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setCurrency(msg.balance?.currency || "USD");
             break;
           }
+          case "statement": {
+            const txns: StatementTrade[] = (msg.statement?.transactions ?? [])
+              .filter((t: Record<string, unknown>) => t.action_type === "buy" || t.action_type === "sell")
+              .slice(0, 5)
+              .map((t: Record<string, unknown>) => ({
+                transaction_id: t.transaction_id as number,
+                action_type: t.action_type as string,
+                amount: t.amount as number,
+                balance_after: t.balance_after as number,
+                transaction_time: t.transaction_time as number,
+                shortcode: (t.shortcode as string | undefined) ?? null,
+                contract_id: (t.contract_id as number | undefined) ?? null,
+                pnl: (t.pnl as number | undefined) ?? null,
+              }));
+            setRecentTrades(txns);
+            break;
+          }
         }
       } catch (_) {}
     };
@@ -195,12 +226,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsAuthorized(false);
     setBalance(null);
     setWsConnected(false);
+    setRecentTrades([]);
   };
 
   const switchAccount = (acct: DerivAccount) => {
     setActiveAccount(acct);
     setIsAuthorized(false);
     setBalance(null);
+    setRecentTrades([]);
     localStorage.setItem(TOKEN_KEY, acct.token);
     connect(acct.token);
   };
@@ -215,6 +248,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         balance,
         currency,
         wsConnected,
+        recentTrades,
         login,
         signup,
         logout,
