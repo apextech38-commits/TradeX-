@@ -2,9 +2,10 @@ import { useState } from "react";
 import {
   Menu, ChevronDown, LogOut, User, Wifi, WifiOff,
   LayoutDashboard, Bot, TrendingUp, CandlestickChart,
-  Cpu, BarChart2, Target, Users, Monitor,
+  Cpu, BarChart2, Target, Users, Monitor, Moon, Sun,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import { useTheme } from "./ThemeProvider";
 
 interface NavbarProps {
   activeTab: string;
@@ -42,9 +43,10 @@ export default function Navbar({ activeTab, setActiveTab }: NavbarProps) {
     isLoggedIn, isAuthorized, activeAccount, accounts,
     balance, currency, wsConnected, login, signup, logout, switchAccount,
   } = useAuth();
+  const { theme, setTheme } = useTheme();
 
   const [showAccountMenu, setShowAccountMenu] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [showThemeMenu, setShowThemeMenu] = useState(false);
 
   const formattedBalance = balance !== null
     ? `${currency} ${balance.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
@@ -56,15 +58,35 @@ export default function Navbar({ activeTab, setActiveTab }: NavbarProps) {
       {/* ── Row 1: Hamburger + Logo + Auth ─────────────────────────────────── */}
       <div className="flex items-center justify-between px-3 h-[44px]">
 
-        {/* Left: Hamburger + Logo */}
+        {/* Left: Hamburger (toggles theme) + Logo */}
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => setMenuOpen(v => !v)}
-            className="p-1.5 text-[#6B7280] hover:text-[#1A1A1A] hover:bg-[#F4F6FA] rounded-md transition-colors"
-            aria-label="Open menu"
-          >
-            <Menu className="w-5 h-5" />
-          </button>
+          <div className="relative">
+            <button
+              onClick={() => setShowThemeMenu(v => !v)}
+              className="p-1.5 text-[#6B7280] hover:text-[#1A1A1A] hover:bg-[#F4F6FA] rounded-md transition-colors"
+              aria-label="Toggle theme"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+
+            {/* Small theme toggle dropdown */}
+            {showThemeMenu && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setShowThemeMenu(false)} />
+                <div className="absolute left-0 top-full mt-1 z-50 bg-white border border-[#E5E7EB] rounded-xl shadow-xl p-1 min-w-[140px]">
+                  <button
+                    onClick={() => { setTheme(theme === "dark" ? "light" : "dark"); setShowThemeMenu(false); }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-[#1A1A1A] hover:bg-[#F4F6FA] rounded-lg transition-colors"
+                  >
+                    {theme === "dark"
+                      ? <><Sun className="w-4 h-4 text-[#F59E0B]" /><span>Light mode</span></>
+                      : <><Moon className="w-4 h-4 text-[#6B7280]" /><span>Dark mode</span></>
+                    }
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
 
           <button
             data-testid="logo-home"
@@ -182,39 +204,6 @@ export default function Navbar({ activeTab, setActiveTab }: NavbarProps) {
         </div>
       </div>
 
-      {/* Mobile slide-out menu (hamburger) */}
-      {menuOpen && (
-        <>
-          <div className="fixed inset-0 z-50 bg-black/40" onClick={() => setMenuOpen(false)} />
-          <div className="fixed top-0 left-0 bottom-0 w-72 z-50 bg-white shadow-2xl flex flex-col">
-            <div className="flex items-center justify-between px-4 h-[44px] border-b border-[#E5E7EB]">
-              <div className="flex items-start">
-                <span className="text-xl font-bold text-[#1E90FF]">TradeX</span>
-                <span className="text-[10px] font-bold ml-0.5 mt-0.5 px-1 py-[1px] rounded bg-[#F59E0B]/20 text-[#F59E0B]">PRO</span>
-              </div>
-              <button onClick={() => setMenuOpen(false)} className="p-1.5 text-[#6B7280] hover:text-[#1A1A1A]">
-                ✕
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto py-2">
-              {TAB_ICONS.map(({ label, Icon }) => (
-                <button
-                  key={label}
-                  onClick={() => { setActiveTab(label); setMenuOpen(false); }}
-                  className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium transition-colors ${
-                    activeTab === label
-                      ? "bg-[#1E90FF]/10 text-[#1E90FF] border-r-2 border-[#1E90FF]"
-                      : "text-[#1A1A1A] hover:bg-[#F4F6FA]"
-                  }`}
-                >
-                  <Icon className="w-5 h-5" />
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-        </>
-      )}
     </nav>
   );
 }
