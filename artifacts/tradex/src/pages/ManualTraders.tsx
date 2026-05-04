@@ -463,7 +463,7 @@ export default function ManualTraders() {
 
         {/* Chart — fixed 260px height */}
         <div className="mx-3 mt-2 bg-white border border-[#E5E7EB] rounded-2xl shadow-sm overflow-hidden" style={{ height: 260 }}>
-          <LightweightChart symbol={sym.id} />
+          <LightweightChart symbol={sym.id} tradingMode />
         </div>
 
         {/* Trade panel */}
