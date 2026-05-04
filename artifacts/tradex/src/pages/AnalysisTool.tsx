@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Settings, RefreshCw, TrendingUp, TrendingDown } from "lucide-react";
+import { Settings, RefreshCw, TrendingUp, TrendingDown, X } from "lucide-react";
 import { DERIV_APP_ID, OAUTH_APP_ID } from "@/context/AuthContext";
 import { useAuth } from "@/context/AuthContext";
 
@@ -1104,12 +1104,348 @@ function ApexAITab() {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
+// TRADING CONFIGURATION MODAL
+// ══════════════════════════════════════════════════════════════════════════════
+
+const VOLATILITY_OPTS = [
+  { label: "Volatility 10 Index",        value: "R_10"      },
+  { label: "Volatility 25 Index",        value: "R_25"      },
+  { label: "Volatility 50 Index",        value: "R_50"      },
+  { label: "Volatility 75 Index",        value: "R_75"      },
+  { label: "Volatility 100 Index",       value: "R_100"     },
+  { label: "Volatility 10 (1s) Index",   value: "1HZ10V"    },
+  { label: "Volatility 25 (1s) Index",   value: "1HZ25V"    },
+  { label: "Volatility 50 (1s) Index",   value: "1HZ50V"    },
+  { label: "Volatility 75 (1s) Index",   value: "1HZ75V"    },
+  { label: "Volatility 100 (1s) Index",  value: "1HZ100V"   },
+  { label: "Volatility 150 (1s) Index",  value: "1HZ150V"   },
+  { label: "Volatility 200 (1s) Index",  value: "1HZ200V"   },
+  { label: "Volatility 250 (1s) Index",  value: "1HZ250V"   },
+  { label: "Boom 300 Index",             value: "BOOM300N"  },
+  { label: "Boom 500 Index",             value: "BOOM500N"  },
+  { label: "Boom 1000 Index",            value: "BOOM1000N" },
+  { label: "Crash 300 Index",            value: "CRASH300N" },
+  { label: "Crash 500 Index",            value: "CRASH500N" },
+  { label: "Crash 1000 Index",           value: "CRASH1000N"},
+  { label: "Jump 10 Index",              value: "JD10"      },
+  { label: "Jump 25 Index",              value: "JD25"      },
+  { label: "Jump 50 Index",              value: "JD50"      },
+  { label: "Jump 75 Index",              value: "JD75"      },
+  { label: "Jump 100 Index",             value: "JD100"     },
+  { label: "Step Index 100",             value: "stpRNG100" },
+];
+
+const MARKET_OPTS = [
+  "Continuous Indices", "Crash / Boom Indices", "Jump Indices",
+  "Step Indices", "Forex", "Cryptocurrencies", "Metals",
+];
+
+const TRADE_TYPE_OPTS = [
+  { label: "Rise / Fall",       value: "rise_fall"    },
+  { label: "Higher / Lower",    value: "higher_lower" },
+  { label: "Even / Odd",        value: "even_odd"     },
+  { label: "Matches / Differs", value: "matches"      },
+  { label: "Over / Under",      value: "over_under"   },
+  { label: "Touch / No Touch",  value: "touch"        },
+  { label: "Accumulators",      value: "accumulators" },
+  { label: "Multipliers",       value: "multipliers"  },
+];
+
+const TYPE_OPTS = [
+  { label: "Call (Rise)", value: "call"   },
+  { label: "Put (Fall)",  value: "put"    },
+  { label: "Even",        value: "even"   },
+  { label: "Odd",         value: "odd"    },
+  { label: "Over",        value: "over"   },
+  { label: "Under",       value: "under"  },
+  { label: "Match",       value: "match"  },
+  { label: "Differ",      value: "differ" },
+];
+
+const CONTRACT_OPTS = [
+  { label: "CALL",       value: "CALL"       },
+  { label: "PUT",        value: "PUT"        },
+  { label: "DIGITEVEN",  value: "DIGITEVEN"  },
+  { label: "DIGITODD",   value: "DIGITODD"   },
+  { label: "DIGITMATCH", value: "DIGITMATCH" },
+  { label: "DIGITDIFF",  value: "DIGITDIFF"  },
+  { label: "DIGITOVER",  value: "DIGITOVER"  },
+  { label: "DIGITUNDER", value: "DIGITUNDER" },
+  { label: "ACCU",       value: "ACCU"       },
+  { label: "MULTUP",     value: "MULTUP"     },
+  { label: "MULTDOWN",   value: "MULTDOWN"   },
+];
+
+const CURRENCY_OPTS = ["USD", "EUR", "GBP", "AUD", "JPY"];
+
+interface TradingConfig {
+  volatility:     string;
+  market:         string;
+  tradeType:      string;
+  type:           string;
+  contract:       string;
+  prediction:     number;
+  prediction2:    number;
+  duration:       number;
+  stake:          number;
+  currency:       string;
+  candleInterval: number;
+}
+
+const DEFAULT_CONFIG: TradingConfig = {
+  volatility:     "R_100",
+  market:         "Continuous Indices",
+  tradeType:      "rise_fall",
+  type:           "call",
+  contract:       "CALL",
+  prediction:     5,
+  prediction2:    3,
+  duration:       5,
+  stake:          10,
+  currency:       "USD",
+  candleInterval: 60,
+};
+
+/* ── Reusable dropdown ────────────────────────────────────────────────────── */
+function CFGSelect({ label, value, onChange, opts }: {
+  label:    string;
+  value:    string;
+  onChange: (v: string) => void;
+  opts:     { label: string; value: string }[];
+}) {
+  return (
+    <div className="flex flex-col gap-1">
+      <label className="text-[11px] font-semibold text-[#6B7280] uppercase tracking-wide">
+        {label}
+      </label>
+      <div className="relative">
+        <select
+          value={value}
+          onChange={e => onChange(e.target.value)}
+          className="w-full appearance-none rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] px-3 py-2.5 pr-8 text-sm text-[#1A1A1A] outline-none focus:border-[#1E90FF] focus:ring-2 focus:ring-[#1E90FF]/15 transition-all cursor-pointer"
+        >
+          {opts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+        {/* chevron */}
+        <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[#9CA3AF] text-xs">▾</span>
+      </div>
+    </div>
+  );
+}
+
+/* ── Reusable number input with optional right suffix ─────────────────────── */
+function CFGNumber({ label, value, onChange, suffix, min = 0, step = 1 }: {
+  label:    string;
+  value:    number;
+  onChange: (v: number) => void;
+  suffix?:  string;
+  min?:     number;
+  step?:    number;
+}) {
+  return (
+    <div className="flex flex-col gap-1">
+      <label className="text-[11px] font-semibold text-[#6B7280] uppercase tracking-wide">
+        {label}
+      </label>
+      <div className="relative flex items-center">
+        <input
+          type="number"
+          value={value}
+          min={min}
+          step={step}
+          onChange={e => onChange(Number(e.target.value))}
+          className={`w-full rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] px-3 py-2.5 text-sm text-[#1A1A1A] outline-none focus:border-[#1E90FF] focus:ring-2 focus:ring-[#1E90FF]/15 transition-all ${suffix ? "pr-16" : ""}`}
+        />
+        {suffix && (
+          <span className="pointer-events-none absolute right-3 text-xs font-semibold text-[#9CA3AF]">
+            {suffix}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ── Modal component ──────────────────────────────────────────────────────── */
+function TradingConfigModal({ open, onClose, config, onChange, onRun }: {
+  open:     boolean;
+  onClose:  () => void;
+  config:   TradingConfig;
+  onChange: (k: keyof TradingConfig, v: string | number) => void;
+  onRun:    () => void;
+}) {
+  useEffect(() => {
+    if (!open) return;
+    const h = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ backgroundColor: "rgba(0,0,0,0.55)", backdropFilter: "blur(2px)" }}
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div
+        className="relative w-full bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden"
+        style={{ maxWidth: 400, maxHeight: "90dvh", animation: "tcm-in 0.2s cubic-bezier(0.34,1.26,0.64,1) both" }}
+      >
+        {/* ── Header ── */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[#F0F0F0] shrink-0 bg-white">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-[#0E1C2F] flex items-center justify-center shrink-0">
+              <Settings className="w-4 h-4 text-white" />
+            </div>
+            <div>
+              <h2 className="text-sm font-bold text-[#1A1A1A] leading-tight">Trading Configuration</h2>
+              <p className="text-[10px] text-[#9CA3AF] leading-tight">Adjust your trading parameters</p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 flex items-center justify-center rounded-xl text-[#9CA3AF] hover:text-[#1A1A1A] hover:bg-[#F4F6FA] transition-colors shrink-0"
+            aria-label="Close"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* ── Scrollable form body ── */}
+        <div className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-3.5">
+
+          <CFGSelect
+            label="Volatility"
+            value={config.volatility}
+            onChange={v => onChange("volatility", v)}
+            opts={VOLATILITY_OPTS}
+          />
+
+          <CFGSelect
+            label="Market"
+            value={config.market}
+            onChange={v => onChange("market", v)}
+            opts={MARKET_OPTS.map(m => ({ label: m, value: m }))}
+          />
+
+          <CFGSelect
+            label="Trade Type"
+            value={config.tradeType}
+            onChange={v => onChange("tradeType", v)}
+            opts={TRADE_TYPE_OPTS}
+          />
+
+          <CFGSelect
+            label="Type"
+            value={config.type}
+            onChange={v => onChange("type", v)}
+            opts={TYPE_OPTS}
+          />
+
+          <CFGSelect
+            label="Contract"
+            value={config.contract}
+            onChange={v => onChange("contract", v)}
+            opts={CONTRACT_OPTS}
+          />
+
+          {/* Two prediction fields side-by-side */}
+          <div className="grid grid-cols-2 gap-3">
+            <CFGNumber
+              label="Prediction"
+              value={config.prediction}
+              onChange={v => onChange("prediction", v)}
+              min={0}
+            />
+            <CFGNumber
+              label="Prediction 2"
+              value={config.prediction2}
+              onChange={v => onChange("prediction2", v)}
+              min={0}
+            />
+          </div>
+
+          <CFGNumber
+            label="Duration"
+            value={config.duration}
+            onChange={v => onChange("duration", v)}
+            suffix="Ticks"
+            min={1}
+          />
+
+          {/* Stake with inline currency selector */}
+          <div className="flex flex-col gap-1">
+            <label className="text-[11px] font-semibold text-[#6B7280] uppercase tracking-wide">Stake</label>
+            <div className="flex gap-2">
+              <input
+                type="number"
+                value={config.stake}
+                min={1}
+                step={0.01}
+                onChange={e => onChange("stake", Number(e.target.value))}
+                className="flex-1 rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] px-3 py-2.5 text-sm text-[#1A1A1A] outline-none focus:border-[#1E90FF] focus:ring-2 focus:ring-[#1E90FF]/15 transition-all"
+              />
+              <div className="relative">
+                <select
+                  value={config.currency}
+                  onChange={e => onChange("currency", e.target.value)}
+                  className="h-full appearance-none rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] px-3 pr-7 py-2.5 text-sm font-semibold text-[#1A1A1A] outline-none focus:border-[#1E90FF] focus:ring-2 focus:ring-[#1E90FF]/15 transition-all cursor-pointer"
+                  style={{ minWidth: 72 }}
+                >
+                  {CURRENCY_OPTS.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+                <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[#9CA3AF] text-xs">▾</span>
+              </div>
+            </div>
+          </div>
+
+          <CFGNumber
+            label="Candle Interval"
+            value={config.candleInterval}
+            onChange={v => onChange("candleInterval", v)}
+            min={1}
+          />
+        </div>
+
+        {/* ── Footer ── */}
+        <div className="px-5 py-4 border-t border-[#F0F0F0] shrink-0 bg-[#FAFAFA] flex items-center justify-between gap-3">
+          <button
+            onClick={onRun}
+            className="flex items-center gap-2 px-6 py-2.5 bg-[#22C55E] hover:bg-[#16A34A] active:scale-[0.97] text-white text-sm font-bold rounded-xl transition-all shadow-sm shadow-[#22C55E]/30"
+          >
+            <TrendingUp className="w-4 h-4" />
+            Run
+          </button>
+          <span className="text-[11px] text-[#9CA3AF] text-right leading-tight">
+            Changes apply<br />immediately
+          </span>
+        </div>
+      </div>
+
+      <style>{`
+        @keyframes tcm-in {
+          from { opacity: 0; transform: scale(0.92) translateY(12px); }
+          to   { opacity: 1; transform: scale(1)    translateY(0);    }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
 // MAIN — AnalysisTool
 // ══════════════════════════════════════════════════════════════════════════════
 export default function AnalysisTool() {
   const [activeTab,   setActiveTab]   = useState("circles");
   const [globalSym,   setGlobalSym]   = useState("R_10");
   const [tickWindow,  setTickWindow]  = useState(1000);
+  const [showConfig,  setShowConfig]  = useState(false);
+  const [config,      setConfig]      = useState<TradingConfig>(DEFAULT_CONFIG);
+
+  const handleConfigChange = (k: keyof TradingConfig, v: string | number) =>
+    setConfig(prev => ({ ...prev, [k]: v }));
 
   const globalWS = useDerivWS(globalSym, tickWindow);
   const usesGlobal = ["circles","signals","smart"].includes(activeTab);
@@ -1131,6 +1467,14 @@ export default function AnalysisTool() {
   return (
     <div className="flex flex-col bg-[#F4F6FA]" style={{ minHeight:"calc(100dvh - 132px)" }}>
 
+      <TradingConfigModal
+        open={showConfig}
+        onClose={() => setShowConfig(false)}
+        config={config}
+        onChange={handleConfigChange}
+        onRun={() => setShowConfig(false)}
+      />
+
       {/* Top controls bar */}
       <div className="bg-white border-b border-[#E5E7EB] px-4 py-2.5 flex items-center gap-3 flex-wrap shrink-0">
         {usesGlobal && (
@@ -1140,7 +1484,10 @@ export default function AnalysisTool() {
           <ConnDot connected={usesGlobal ? globalWS.connected : true} />
           <span>{usesGlobal ? (globalWS.connected ? `${globalWS.digits.length} ticks · Live` : "Connecting...") : "Live data per tab"}</span>
         </div>
-        <button className="flex items-center gap-1.5 px-3 py-2 bg-[#0E1C2F] text-white rounded-lg text-xs font-semibold hover:bg-[#1E2D42] transition-colors shrink-0">
+        <button
+          onClick={() => setShowConfig(true)}
+          className="flex items-center gap-1.5 px-3 py-2 bg-[#0E1C2F] text-white rounded-lg text-xs font-semibold hover:bg-[#1E2D42] transition-colors shrink-0"
+        >
           <Settings className="w-3.5 h-3.5" /> Trading Configuration
         </button>
       </div>
