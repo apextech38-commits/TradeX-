@@ -65,7 +65,7 @@ function AppContent() {
   };
 
   return (
-    <div className="min-h-screen w-full bg-background text-foreground font-sans flex flex-col pt-[56px] pb-[52px]">
+    <div className="min-h-screen w-full bg-background text-foreground font-sans flex flex-col pt-[80px] pb-[52px]">
       <Navbar activeTab={activeTab} setActiveTab={setActiveTab} />
       <main className="flex-1 flex flex-col w-full h-full overflow-y-auto">
         {renderContent()}
