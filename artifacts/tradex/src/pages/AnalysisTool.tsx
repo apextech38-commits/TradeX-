@@ -299,7 +299,8 @@ export default function AnalysisTool() {
             </div>
 
             {/* Digit circles row */}
-            <div className="flex justify-between items-end gap-0.5 md:gap-1">
+            <div className="overflow-x-auto -mx-1 px-1">
+            <div className="flex justify-between items-end gap-0.5 min-w-[280px]">
               {digitCounts.map((count, i) => {
                 const pct  = ((count / total) * 100).toFixed(1);
                 const { circle, text } = getDigitStyle(i, count);
@@ -336,6 +337,7 @@ export default function AnalysisTool() {
                   </div>
                 );
               })}
+            </div>
             </div>
 
             {/* Legend */}

@@ -400,7 +400,7 @@ export default function CopyTrading() {
                 data-testid="button-start-copy-trading"
                 onClick={handleToggleCopy}
                 disabled={startingCopy}
-                className={`h-10 px-6 ml-auto text-white transition-colors ${
+                className={`h-10 px-6 w-full sm:w-auto sm:ml-auto text-white transition-colors ${
                   isCopying
                     ? "bg-[#EF4444] hover:bg-[#DC2626]"
                     : "bg-[#22C55E] hover:bg-[#16a34a]"
