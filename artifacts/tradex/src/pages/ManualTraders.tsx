@@ -1,19 +1,7 @@
-const ManualTraders = () => {
+export default function ManualTraders() {
   return (
-    <div style={{ width: '100%', height: 'calc(100vh - 120px)', position: 'relative', overflow: 'hidden' }}>
-      <iframe
-        src="https://dtrader.deriv.com"
-        style={{
-          width: '100%',
-          height: 'calc(100% + 60px)',
-          border: 'none',
-          marginTop: '-60px'
-        }}
-        allow="clipboard-read; clipboard-write"
-        title="DTrader"
-      />
+    <div className="flex items-center justify-center h-full min-h-[60vh]">
+      <p className="text-muted-foreground text-sm">Loading Manual Traders...</p>
     </div>
   );
-};
-
-export default ManualTraders;
+}
