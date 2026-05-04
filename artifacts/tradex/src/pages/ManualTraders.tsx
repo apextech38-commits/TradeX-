@@ -1,11 +1,11 @@
 const ManualTraders = () => {
   return (
-    <div style={{ width: '100%', height: 'calc(100vh - 120px)', position: 'relative' }}>
+    <div style={{ width: '100%', height: 'calc(100vh - 120px)', position: 'relative', overflow: 'hidden' }}>
       <iframe
         src="https://dtrader.deriv.com"
         style={{
           width: '100%',
-          height: '100%',
+          height: 'calc(100% + 60px)',
           border: 'none',
           marginTop: '-60px'
         }}
