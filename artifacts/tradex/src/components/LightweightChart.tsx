@@ -13,9 +13,11 @@ interface Props {
   symbol: string;
   /** When true: line-only chart + dashed price line + trade window overlay */
   tradingMode?: boolean;
+  /** Called whenever a new price tick arrives (for parent price display) */
+  onPriceUpdate?: (price: number) => void;
 }
 
-export default function LightweightChart({ symbol, tradingMode = false }: Props) {
+export default function LightweightChart({ symbol, tradingMode = false, onPriceUpdate }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef     = useRef<IChartApi | null>(null);
   const seriesRef    = useRef<ISeriesApi<"Area"> | ISeriesApi<"Line"> | null>(null);
@@ -169,20 +171,20 @@ export default function LightweightChart({ symbol, tradingMode = false }: Props)
           if (seriesRef.current && pts.length > 0) {
             seriesRef.current.setData(pts);
             chartRef.current?.timeScale().fitContent();
-            // Initialise the dashed price line
             if (tradingMode && priceLineRef.current && prices.length > 0) {
               priceLineRef.current.applyOptions({ price: prices[prices.length - 1] });
             }
+            if (prices.length > 0) onPriceUpdate?.(prices[prices.length - 1]);
           }
         }
 
         if (msg.msg_type === "tick") {
           const { epoch, quote } = msg.tick as { epoch: number; quote: number };
           seriesRef.current?.update({ time: epoch as UTCTimestamp, value: quote });
-          // Slide the dashed price line to the new price
           if (tradingMode && priceLineRef.current) {
             priceLineRef.current.applyOptions({ price: quote });
           }
+          onPriceUpdate?.(quote);
         }
       } catch (_) {}
     };

@@ -417,138 +417,237 @@ export default function ManualTraders() {
   };
 
   return (
-    /* Outer: fills the viewport between navbar (80px) and bottom bar (52px) */
-    <div className="flex flex-col bg-[#F4F6FA]" style={{ height: "calc(100dvh - 132px)" }}>
-
+    <div
+      className="flex flex-col"
+      style={{ height: "calc(100dvh - 132px)", background: "#f2f3f4", fontFamily: "'IBM Plex Sans', 'Inter', sans-serif" }}
+    >
       {showMarkets && (
         <MarketsBottomSheet selected={sym} onSelect={s => setSym(s)} onClose={() => setShowMarkets(false)} />
       )}
-      {showTradeTypes && (
-        <TradeTypesBottomSheet selected={tradeTypeId} onSelect={id => setTradeTypeId(id)} onClose={() => setShowTradeTypes(false)} />
-      )}
 
-      {/* Scrollable content inside the fixed-height container */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto flex flex-col">
 
-        {/* Market selector card */}
+        {/* ── Market header ──────────────────────────────────────────── */}
         <button
           onClick={() => setShowMarkets(true)}
-          className="mx-3 mt-3 w-[calc(100%-24px)] bg-white border border-[#E5E7EB] rounded-2xl shadow-sm p-3 flex items-center gap-3 active:scale-[0.99] transition-transform"
+          className="bg-white border-b border-[#d6dadb] px-4 py-3 w-full flex items-center gap-3 text-left shrink-0 active:bg-[#f2f3f4] transition-colors"
         >
-          <div className="w-10 h-10 rounded-xl bg-[#1E90FF]/10 flex items-center justify-center shrink-0">
-            <CandlestickChart className="w-5 h-5 text-[#1E90FF]" />
+          <div className="w-10 h-10 rounded-lg bg-[#f2f3f4] flex items-center justify-center shrink-0">
+            <span className="text-[10px] font-bold text-[#333]">{sym.badge.slice(0, 4)}</span>
           </div>
-          <div className="flex-1 text-left min-w-0">
-            <div className="text-sm font-bold text-[#1A1A1A] truncate">{sym.label}</div>
-            {price != null ? (
-              <div className="flex items-center gap-1.5 mt-0.5">
-                <span className={`text-sm font-mono font-bold ${priceUp === false ? "text-[#EF4444]" : "text-[#22C55E]"}`}>
-                  {price.toFixed(dp)}
-                </span>
-                {priceChange != null && prevPrice != null && (
-                  <span className={`text-xs ${priceUp === false ? "text-[#EF4444]" : "text-[#22C55E]"}`}>
-                    {priceChange >= 0 ? "+" : ""}{priceChange.toFixed(dp)} {priceUp === false ? "▼" : "▲"}
+          <div className="flex-1 min-w-0">
+            <div className="text-xs text-[#999] truncate">{sym.label}</div>
+            <div className="flex items-center gap-2 mt-0.5">
+              {price != null ? (
+                <>
+                  <span className={`text-xl font-bold font-mono tracking-tight leading-none ${priceUp === false ? "text-[#ec3f3f]" : "text-[#4bb4b3]"}`}>
+                    {price.toFixed(dp)}
                   </span>
-                )}
-              </div>
-            ) : (
-              <div className="text-xs text-[#9CA3AF] mt-0.5 flex items-center gap-1">
-                <span className={`w-1.5 h-1.5 rounded-full ${connDot}`} />
-                Connecting…
-              </div>
-            )}
+                  {priceChange != null && (
+                    <span className={`text-xs font-medium ${priceUp === false ? "text-[#ec3f3f]" : "text-[#4bb4b3]"}`}>
+                      {priceChange >= 0 ? "+" : ""}{priceChange.toFixed(dp)} {priceUp === false ? "▼" : "▲"}
+                    </span>
+                  )}
+                </>
+              ) : (
+                <span className="text-sm text-[#999]">Connecting…</span>
+              )}
+            </div>
           </div>
-          <ChevronDown className="w-5 h-5 text-[#6B7280] shrink-0" />
+          <div className="flex items-center gap-1.5 shrink-0">
+            <span className={`w-2 h-2 rounded-full ${connDot}`} />
+            <span className="text-[11px] font-semibold text-[#999] uppercase tracking-wide">Live</span>
+            <ChevronDown className="w-4 h-4 text-[#999]" />
+          </div>
         </button>
 
-        {/* Chart — fixed 260px height */}
-        <div className="mx-3 mt-2 bg-white border border-[#E5E7EB] rounded-2xl shadow-sm overflow-hidden" style={{ height: 260 }}>
+        {/* ── Chart ──────────────────────────────────────────────────── */}
+        <div style={{ height: 220, background: "#0C1B2E" }} className="shrink-0">
           <LightweightChart symbol={sym.id} tradingMode />
         </div>
 
-        {/* Trade panel */}
-        <div className="mx-3 mt-2 mb-3 bg-white border border-[#E5E7EB] rounded-2xl shadow-sm overflow-hidden">
+        {/* ── Trade panel ────────────────────────────────────────────── */}
+        <div className="bg-white flex-1 flex flex-col min-h-0">
 
-          {/* Trade type row */}
-          <button
-            onClick={() => setShowTradeTypes(true)}
-            className="w-full flex items-center gap-3 px-4 py-3 border-b border-[#E5E7EB] hover:bg-[#F4F6FA] transition-colors"
-          >
-            <div className="w-8 h-8 rounded-lg bg-[#1E90FF]/10 flex items-center justify-center shrink-0">
-              <tradeTypeMeta.Icon className="w-4 h-4 text-[#1E90FF]" />
+          {/* Trade type pills — horizontal scroll */}
+          <div className="overflow-x-auto shrink-0" style={{ scrollbarWidth: "none" }}>
+            <div className="flex px-3 pt-2 gap-0.5 w-max border-b border-[#f2f3f4]">
+              {TRADE_TYPES.map(t => {
+                const active = tradeTypeId === t.id;
+                return (
+                  <button
+                    key={t.id}
+                    onClick={() => setTradeTypeId(t.id)}
+                    className={`flex items-center gap-1.5 px-3 py-2 text-[11px] font-semibold whitespace-nowrap border-b-2 transition-all ${
+                      active ? "border-[#4bb4b3] text-[#4bb4b3]" : "border-transparent text-[#999] hover:text-[#333]"
+                    }`}
+                  >
+                    <t.Icon className="w-3.5 h-3.5 shrink-0" />
+                    {t.label}
+                    {t.badge && (
+                      <span className="px-1 py-0.5 text-[8px] font-bold bg-[#4bb4b3] text-white rounded-sm leading-none">NEW</span>
+                    )}
+                  </button>
+                );
+              })}
             </div>
-            <span className="text-sm font-bold text-[#1A1A1A] flex-1 text-left">{tradeTypeMeta.label}</span>
-            {tradeTypeMeta.badge && (
-              <span className="px-1.5 py-0.5 text-[10px] font-bold bg-[#22C55E] text-white rounded mr-1">{tradeTypeMeta.badge}</span>
-            )}
-            {tradeTypeId === "accumulators" && (
-              <div className="flex items-center gap-1 mr-1">
+          </div>
+
+          {/* Growth rate (accumulators only) */}
+          {tradeTypeId === "accumulators" && (
+            <div className="flex items-center gap-3 px-4 py-3 border-b border-[#f2f3f4] shrink-0">
+              <span className="text-xs font-semibold text-[#999] w-24 shrink-0">Growth rate</span>
+              <div className="flex gap-2">
                 {[1, 2, 3, 4, 5].map(r => (
                   <button
                     key={r}
-                    onClick={e => { e.stopPropagation(); setGrowthRate(r); }}
-                    className={`w-7 h-7 text-xs font-bold rounded-full transition-colors ${growthRate === r ? "bg-[#1E90FF] text-white" : "bg-[#F4F6FA] text-[#6B7280] hover:bg-[#E5E7EB]"}`}
+                    onClick={() => setGrowthRate(r)}
+                    className={`w-10 h-8 text-xs font-bold rounded-lg transition-colors ${
+                      growthRate === r ? "bg-[#4bb4b3] text-white" : "bg-[#f2f3f4] text-[#333] hover:bg-[#d6dadb]"
+                    }`}
                   >
                     {r}%
                   </button>
                 ))}
               </div>
-            )}
-            <ChevronRight className="w-4 h-4 text-[#9CA3AF]" />
-          </button>
-
-          {/* Stake */}
-          <div className="flex items-center gap-3 px-4 py-3 border-b border-[#E5E7EB]">
-            <button onClick={() => adjustStake(-1)} className="w-9 h-9 rounded-full bg-[#F4F6FA] border border-[#E5E7EB] flex items-center justify-center text-xl font-bold hover:bg-[#E5E7EB] transition-colors shrink-0">−</button>
-            <div className="flex-1 text-center">
-              <input
-                type="number" value={stakeInput}
-                onChange={e => { setStakeInput(e.target.value); const n = parseFloat(e.target.value); if (!isNaN(n) && n >= 1) setStake(n); }}
-                onBlur={() => { const n = parseFloat(stakeInput); if (isNaN(n) || n < 1) { setStake(1); setStakeInput("1"); } else { setStake(n); setStakeInput(String(n)); } }}
-                className="w-full text-center text-2xl font-bold text-[#1A1A1A] border-none outline-none bg-transparent"
-                min={1} step={1}
-              />
             </div>
-            <button onClick={() => adjustStake(1)} className="w-9 h-9 rounded-full bg-[#F4F6FA] border border-[#E5E7EB] flex items-center justify-center text-xl font-bold hover:bg-[#E5E7EB] transition-colors shrink-0">+</button>
-            <span className="text-sm text-[#9CA3AF] font-medium shrink-0 w-10 text-right">Stake</span>
+          )}
+
+          {/* Duration */}
+          <div className="flex items-center px-4 py-3 border-b border-[#f2f3f4] gap-3 shrink-0">
+            <span className="text-xs font-semibold text-[#999] w-24 shrink-0">Duration</span>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                defaultValue={5}
+                min={1}
+                max={10}
+                className="w-16 text-center text-sm font-bold text-[#333] border border-[#d6dadb] rounded-lg py-2 outline-none focus:border-[#4bb4b3] bg-white"
+              />
+              <span className="text-sm font-medium text-[#333]">Ticks</span>
+            </div>
           </div>
 
-          {/* Take profit */}
-          <div className="border-b border-[#E5E7EB]">
+          {/* Stake */}
+          <div className="flex items-center px-4 py-3 border-b border-[#f2f3f4] gap-3 shrink-0">
+            <span className="text-xs font-semibold text-[#999] w-24 shrink-0">Stake</span>
+            <div className="flex items-center gap-2 flex-1">
+              <button
+                onClick={() => adjustStake(-1)}
+                className="w-8 h-8 rounded-full border border-[#d6dadb] flex items-center justify-center text-lg font-bold text-[#333] hover:bg-[#f2f3f4] active:bg-[#d6dadb] transition-colors shrink-0"
+              >−</button>
+              <input
+                type="number"
+                value={stakeInput}
+                onChange={e => { setStakeInput(e.target.value); const n = parseFloat(e.target.value); if (!isNaN(n) && n >= 1) setStake(n); }}
+                onBlur={() => { const n = parseFloat(stakeInput); if (isNaN(n) || n < 1) { setStake(1); setStakeInput("1"); } else { setStake(n); setStakeInput(String(n)); } }}
+                className="flex-1 text-center text-lg font-bold text-[#333] border border-[#d6dadb] rounded-lg py-1.5 outline-none focus:border-[#4bb4b3] bg-white"
+                min={1} step={1}
+              />
+              <button
+                onClick={() => adjustStake(1)}
+                className="w-8 h-8 rounded-full border border-[#d6dadb] flex items-center justify-center text-lg font-bold text-[#333] hover:bg-[#f2f3f4] active:bg-[#d6dadb] transition-colors shrink-0"
+              >+</button>
+              <span className="text-sm font-medium text-[#999] shrink-0">USD</span>
+            </div>
+          </div>
+
+          {/* Take profit toggle */}
+          <div className="border-b border-[#f2f3f4] shrink-0">
             <div className="flex items-center gap-3 px-4 py-3">
-              <button onClick={() => setTakeProfitOn(v => !v)} className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${takeProfitOn ? "bg-[#1E90FF] border-[#1E90FF]" : "border-[#D1D5DB] bg-white"}`}>
-                {takeProfitOn && <span className="text-white text-xs font-bold">✓</span>}
+              <button
+                onClick={() => setTakeProfitOn(v => !v)}
+                className={`w-10 h-6 rounded-full transition-colors relative shrink-0 ${takeProfitOn ? "bg-[#4bb4b3]" : "bg-[#d6dadb]"}`}
+              >
+                <span className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform duration-200 ${takeProfitOn ? "translate-x-5" : "translate-x-1"}`} />
               </button>
-              <span className="flex-1 text-sm font-bold text-[#1A1A1A]">Take profit</span>
-              <Info className="w-4 h-4 text-[#9CA3AF]" />
+              <span className="flex-1 text-sm font-medium text-[#333]">Take profit</span>
+              <Info className="w-4 h-4 text-[#999]" />
             </div>
             {takeProfitOn && (
               <div className="px-4 pb-3">
-                <input type="number" value={takeProfit} onChange={e => setTakeProfit(e.target.value)} placeholder="Enter take profit amount" className="w-full border border-[#E5E7EB] rounded-lg px-3 py-2 text-sm text-[#1A1A1A] outline-none focus:border-[#1E90FF] bg-[#F4F6FA]" min={0} step={0.01} />
+                <div className="flex items-center border border-[#d6dadb] rounded-lg overflow-hidden focus-within:border-[#4bb4b3] transition-colors">
+                  <input
+                    type="number"
+                    value={takeProfit}
+                    onChange={e => setTakeProfit(e.target.value)}
+                    placeholder="0.00"
+                    className="flex-1 px-3 py-2.5 text-sm text-[#333] outline-none bg-white"
+                    min={0} step={0.01}
+                  />
+                  <span className="px-3 text-sm font-medium text-[#999] border-l border-[#d6dadb] bg-[#f2f3f4] py-2.5">USD</span>
+                </div>
               </div>
             )}
           </div>
 
-          {/* Stats */}
-          <div className="flex items-center justify-between px-4 py-2.5 border-b border-[#E5E7EB]">
-            <span className="text-sm text-[#9CA3AF]">Max. payout</span>
-            <span className="text-sm font-bold text-[#1A1A1A]">{Number(maxPayout) > 6000 ? "6,000.00" : parseFloat(maxPayout).toFixed(2)} USD</span>
-          </div>
-          <div className="flex items-center justify-between px-4 py-2.5 border-b border-[#E5E7EB]">
-            <span className="text-sm text-[#9CA3AF]">Max. ticks</span>
-            <span className="text-sm font-bold text-[#1A1A1A]">{maxTicks} ticks</span>
+          {/* Payout stats */}
+          <div className="flex items-center px-4 py-3 gap-8 border-b border-[#f2f3f4] shrink-0">
+            <div>
+              <div className="text-[10px] text-[#999] uppercase tracking-wide font-medium">Max. payout</div>
+              <div className="text-sm font-bold text-[#333]">
+                {Number(maxPayout) > 6000 ? "6,000.00" : parseFloat(maxPayout).toFixed(2)} USD
+              </div>
+            </div>
+            <div>
+              <div className="text-[10px] text-[#999] uppercase tracking-wide font-medium">Max. ticks</div>
+              <div className="text-sm font-bold text-[#333]">{maxTicks} ticks</div>
+            </div>
+            {buyStatus && (
+              <div className="ml-auto text-xs font-semibold text-[#4bb4b3]">{buyStatus}</div>
+            )}
           </div>
 
-          {/* Buy button */}
-          <button
-            onClick={handleBuy}
-            className="w-full h-14 bg-[#1E90FF] hover:bg-[#1a7fe0] active:bg-[#1670c8] text-white font-bold text-base flex items-center justify-center gap-2 transition-colors"
-          >
-            <TrendingUp className="w-5 h-5" />
-            {buyStatus ?? "Buy"}
-          </button>
+          {/* Buy buttons */}
+          {["accumulators", "multipliers"].includes(tradeTypeId) ? (
+            <button
+              onClick={handleBuy}
+              className="w-full h-14 flex items-center justify-center gap-2 font-bold text-base text-white transition-colors shrink-0"
+              style={{ background: "#4bb4b3" }}
+              onMouseEnter={e => (e.currentTarget.style.background = "#3d9494")}
+              onMouseLeave={e => (e.currentTarget.style.background = "#4bb4b3")}
+            >
+              <TrendingUp className="w-5 h-5" />
+              {buyStatus ?? "Buy"}
+            </button>
+          ) : (
+            <div className="flex shrink-0">
+              <button
+                onClick={handleBuy}
+                className="flex-1 h-14 text-white font-bold text-sm flex flex-col items-center justify-center gap-0.5 transition-colors"
+                style={{ background: "#4bb4b3" }}
+                onMouseEnter={e => (e.currentTarget.style.background = "#3d9494")}
+                onMouseLeave={e => (e.currentTarget.style.background = "#4bb4b3")}
+              >
+                <span className="text-base leading-none">▲</span>
+                <span>
+                  {tradeTypeId === "even_odd" ? "Even" :
+                   tradeTypeId === "over_under" ? "Over" :
+                   tradeTypeId === "matches" ? "Match" :
+                   tradeTypeId === "touch" ? "Touch" :
+                   tradeTypeId === "higher_lower" ? "Higher" : "Rise"}
+                </span>
+              </button>
+              <button
+                onClick={handleBuy}
+                className="flex-1 h-14 text-white font-bold text-sm flex flex-col items-center justify-center gap-0.5 transition-colors border-l border-white/20"
+                style={{ background: "#ec3f3f" }}
+                onMouseEnter={e => (e.currentTarget.style.background = "#cc2e3d")}
+                onMouseLeave={e => (e.currentTarget.style.background = "#ec3f3f")}
+              >
+                <span className="text-base leading-none">▼</span>
+                <span>
+                  {tradeTypeId === "even_odd" ? "Odd" :
+                   tradeTypeId === "over_under" ? "Under" :
+                   tradeTypeId === "matches" ? "Differ" :
+                   tradeTypeId === "touch" ? "No Touch" :
+                   tradeTypeId === "higher_lower" ? "Lower" : "Fall"}
+                </span>
+              </button>
+            </div>
+          )}
+
         </div>
-
       </div>
     </div>
   );

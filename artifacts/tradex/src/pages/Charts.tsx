@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { X, Search, Star, CandlestickChart, ChevronDown, ChevronRight } from "lucide-react";
+import { useState, useRef } from "react";
+import { X, Search, Star, ChevronDown, ChevronRight } from "lucide-react";
 import LightweightChart from "@/components/LightweightChart";
 
 interface Market { id: string; label: string; badge: string }
@@ -209,42 +209,83 @@ function MarketsBottomSheet({ selected, onSelect, onClose }: {
   );
 }
 
+const TIMEFRAMES = ["Tick", "1s", "5s", "1m", "5m", "15m", "1h", "4h", "1D"];
+
 export default function Charts() {
-  const [sym, setSym]         = useState<Market>(DEFAULT_MKT);
-  const [showModal, setModal] = useState(false);
+  const [sym, setSym]           = useState<Market>(DEFAULT_MKT);
+  const [showModal, setModal]   = useState(false);
+  const [livePrice, setLive]    = useState<number | null>(null);
+  const [tf, setTf]             = useState("Tick");
+  const prevRef                 = useRef<number | null>(null);
+  const [priceDir, setPriceDir] = useState<"up" | "down" | null>(null);
+
+  const dp = livePrice != null ? (livePrice > 100 ? 2 : livePrice > 10 ? 4 : 5) : 2;
+
+  const handlePrice = (p: number) => {
+    if (prevRef.current !== null) setPriceDir(p >= prevRef.current ? "up" : "down");
+    prevRef.current = p;
+    setLive(p);
+  };
 
   return (
-    /* 80 px navbar + 52 px bottom bar = 132 px consumed */
-    <div className="flex flex-col bg-[#F4F6FA]" style={{ height: "calc(100dvh - 132px)" }}>
-
+    <div
+      className="flex flex-col"
+      style={{ height: "calc(100dvh - 132px)", background: "#f2f3f4", fontFamily: "'IBM Plex Sans', 'Inter', sans-serif" }}
+    >
       {showModal && (
-        <MarketsBottomSheet
-          selected={sym}
-          onSelect={setSym}
-          onClose={() => setModal(false)}
-        />
+        <MarketsBottomSheet selected={sym} onSelect={m => { setSym(m); setModal(false); setLive(null); prevRef.current = null; }} onClose={() => setModal(false)} />
       )}
 
-      {/* Market selector */}
-      <button
-        onClick={() => setModal(true)}
-        className="mx-3 mt-3 shrink-0 bg-white border border-[#E5E7EB] rounded-2xl shadow-sm p-3 flex items-center gap-3 active:scale-[0.99] transition-transform"
-      >
-        <div className="w-10 h-10 rounded-xl bg-[#1E90FF]/10 flex items-center justify-center shrink-0">
-          <CandlestickChart className="w-5 h-5 text-[#1E90FF]" />
-        </div>
-        <div className="flex-1 text-left min-w-0">
-          <div className="text-sm font-bold text-[#1A1A1A] truncate">{sym.label}</div>
-          <div className="text-xs text-[#6B7280] font-mono">{sym.id}</div>
-        </div>
-        <ChevronDown className="w-5 h-5 text-[#6B7280] shrink-0" />
-      </button>
+      {/* ── Toolbar ─────────────────────────────────────────────────── */}
+      <div className="bg-white border-b border-[#d6dadb] flex items-center px-3 py-2 gap-2 shrink-0">
 
-      {/* Chart — fills all remaining vertical space */}
-      <div className="mx-3 mt-2 mb-2 flex-1 min-h-0 bg-white border border-[#E5E7EB] rounded-2xl shadow-sm overflow-hidden">
-        <LightweightChart symbol={sym.id} />
+        {/* Symbol selector */}
+        <button
+          onClick={() => setModal(true)}
+          className="flex items-center gap-2 bg-[#f2f3f4] rounded-lg px-3 py-2 hover:bg-[#e6e9e9] active:bg-[#d6dadb] transition-colors shrink-0"
+        >
+          <div
+            className="w-7 h-7 rounded-md flex items-center justify-center text-[9px] font-bold text-white shrink-0"
+            style={{ background: "#4bb4b3" }}
+          >
+            {sym.badge.slice(0, 4)}
+          </div>
+          <span className="text-sm font-semibold text-[#333] max-w-[110px] truncate">{sym.label}</span>
+          <ChevronDown className="w-4 h-4 text-[#999] shrink-0" />
+        </button>
+
+        {/* Live price */}
+        {livePrice != null && (
+          <div className="flex items-center gap-1 shrink-0">
+            <span className={`text-sm font-bold font-mono tabular-nums ${priceDir === "down" ? "text-[#ec3f3f]" : "text-[#4bb4b3]"}`}>
+              {livePrice.toFixed(dp)}
+            </span>
+            <span className={`text-xs leading-none ${priceDir === "down" ? "text-[#ec3f3f]" : "text-[#4bb4b3]"}`}>
+              {priceDir === "down" ? "▼" : "▲"}
+            </span>
+          </div>
+        )}
+
+        {/* Timeframe pills — push to the right */}
+        <div className="flex items-center gap-0.5 ml-auto overflow-x-auto" style={{ scrollbarWidth: "none" }}>
+          {TIMEFRAMES.map(t => (
+            <button
+              key={t}
+              onClick={() => setTf(t)}
+              className={`px-2 py-1 text-[11px] font-semibold rounded transition-colors shrink-0 ${
+                tf === t ? "bg-[#4bb4b3] text-white" : "text-[#999] hover:bg-[#f2f3f4] hover:text-[#333]"
+              }`}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
       </div>
 
+      {/* ── Chart — fills all remaining space ───────────────────────── */}
+      <div className="flex-1 min-h-0 bg-white">
+        <LightweightChart symbol={sym.id} onPriceUpdate={handlePrice} />
+      </div>
     </div>
   );
 }
