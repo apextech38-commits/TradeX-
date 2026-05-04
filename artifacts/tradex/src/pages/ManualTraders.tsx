@@ -3,7 +3,11 @@ import {
   AreaChart, Area, XAxis, YAxis, ReferenceLine, ReferenceArea,
   ResponsiveContainer,
 } from "recharts";
-import { BarChart2, TrendingUp, Info, AlertTriangle, X } from "lucide-react";
+import {
+  BarChart2, TrendingUp, Info, AlertTriangle, X, Search,
+  Star, ChevronDown, ChevronRight, Zap, Hash, ArrowUpDown,
+  Layers, CircleDot,
+} from "lucide-react";
 import { DERIV_APP_ID, OAUTH_APP_ID } from "@/context/AuthContext";
 import { useAuth } from "@/context/AuthContext";
 
@@ -13,22 +17,146 @@ const RETRY_DELAY   = 3_000;
 const MAX_TICKS     = 120;
 const MIN_STAKE     = 0.35;
 const STAKE_STEP    = 1;
-
-// Exact IDs as specified by user
-const SYMBOLS = [
-  { id: "1HZ10V",  label: "Volatility 10 (1s) Index",  badge: "10"  },
-  { id: "R_25",    label: "Volatility 25 Index",        badge: "25"  },
-  { id: "R_50",    label: "Volatility 50 Index",        badge: "50"  },
-  { id: "R_75",    label: "Volatility 75 Index",        badge: "75"  },
-  { id: "1HZ100V", label: "Volatility 100 (1s) Index",  badge: "100" },
-];
-
 const REDIRECT_URI  = "https://dev-utility-hub--apexricky20.replit.app/callback";
 const LOGIN_URL     = `https://oauth.deriv.com/oauth2/authorize?app_id=${OAUTH_APP_ID}&l=EN&brand=deriv&redirect_uri=${encodeURIComponent(REDIRECT_URI)}`;
+const FAV_KEY       = "tradex-fav-markets";
+
+// ── Market definitions ─────────────────────────────────────────────────────────
+interface Market { id: string; label: string; badge: string }
+
+const CONTINUOUS: Market[] = [
+  { id: "1HZ10V",  label: "Volatility 10 (1s) Index",  badge: "10" },
+  { id: "R_10",    label: "Volatility 10 Index",        badge: "10" },
+  { id: "1HZ15V",  label: "Volatility 15 (1s) Index",  badge: "15" },
+  { id: "1HZ25V",  label: "Volatility 25 (1s) Index",  badge: "25" },
+  { id: "R_25",    label: "Volatility 25 Index",        badge: "25" },
+  { id: "1HZ30V",  label: "Volatility 30 (1s) Index",  badge: "30" },
+  { id: "1HZ50V",  label: "Volatility 50 (1s) Index",  badge: "50" },
+  { id: "R_50",    label: "Volatility 50 Index",        badge: "50" },
+  { id: "1HZ75V",  label: "Volatility 75 (1s) Index",  badge: "75" },
+  { id: "R_75",    label: "Volatility 75 Index",        badge: "75" },
+  { id: "1HZ90V",  label: "Volatility 90 (1s) Index",  badge: "90" },
+  { id: "1HZ100V", label: "Volatility 100 (1s) Index", badge: "100" },
+  { id: "R_100",   label: "Volatility 100 Index",       badge: "100" },
+];
+
+const CRASH_BOOM: Market[] = [
+  { id: "BOOM50N",    label: "Boom 50 Index",     badge: "B50"  },
+  { id: "BOOM150N",   label: "Boom 150 Index",    badge: "B150" },
+  { id: "BOOM300N",   label: "Boom 300 Index",    badge: "B300" },
+  { id: "BOOM500N",   label: "Boom 500 Index",    badge: "B500" },
+  { id: "BOOM600N",   label: "Boom 600 Index",    badge: "B600" },
+  { id: "BOOM900N",   label: "Boom 900 Index",    badge: "B900" },
+  { id: "BOOM1000N",  label: "Boom 1000 Index",   badge: "B1K"  },
+  { id: "CRASH50N",   label: "Crash 50 Index",    badge: "C50"  },
+  { id: "CRASH300N",  label: "Crash 300 Index",   badge: "C300" },
+  { id: "CRASH500N",  label: "Crash 500 Index",   badge: "C500" },
+  { id: "CRASH600N",  label: "Crash 600 Index",   badge: "C600" },
+  { id: "CRASH900N",  label: "Crash 900 Index",   badge: "C900" },
+  { id: "CRASH1000N", label: "Crash 1000 Index",  badge: "C1K"  },
+];
+
+const DAILY_RESET: Market[] = [
+  { id: "BRMIDX", label: "Bear Market Index", badge: "BEAR" },
+  { id: "BULIDX", label: "Bull Market Index", badge: "BULL" },
+];
+
+const JUMP: Market[] = [
+  { id: "JD10",  label: "Jump 10 Index",  badge: "J10"  },
+  { id: "JD25",  label: "Jump 25 Index",  badge: "J25"  },
+  { id: "JD50",  label: "Jump 50 Index",  badge: "J50"  },
+  { id: "JD75",  label: "Jump 75 Index",  badge: "J75"  },
+  { id: "JD100", label: "Jump 100 Index", badge: "J100" },
+];
+
+const STEP: Market[] = [
+  { id: "stpRNG100", label: "Step Index 100", badge: "S100" },
+  { id: "stpRNG200", label: "Step Index 200", badge: "S200" },
+  { id: "stpRNG300", label: "Step Index 300", badge: "S300" },
+  { id: "stpRNG400", label: "Step Index 400", badge: "S400" },
+  { id: "stpRNG500", label: "Step Index 500", badge: "S500" },
+];
+
+const RANGE_BREAK: Market[] = [
+  { id: "RB100", label: "Range Break 100 Index", badge: "RB100" },
+  { id: "RB200", label: "Range Break 200 Index", badge: "RB200" },
+];
+
+const MARKET_GROUPS = [
+  {
+    label: "Synthetics",
+    subGroups: [
+      { label: "Continuous Indices",  items: CONTINUOUS   },
+      { label: "Crash/Boom Indices",  items: CRASH_BOOM   },
+      { label: "Daily Reset Indices", items: DAILY_RESET  },
+      { label: "Jump Indices",        items: JUMP         },
+      { label: "Step Indices",        items: STEP         },
+      { label: "Range Break Indices", items: RANGE_BREAK  },
+    ],
+    collapsible: false,
+  },
+  { label: "FX",             subGroups: [], collapsible: true },
+  { label: "Stock Indices",  subGroups: [], collapsible: true },
+  { label: "Cryptocurrencies",subGroups:[],collapsible: true },
+  { label: "Commodities",    subGroups: [], collapsible: true },
+];
+
+// ── Trade type definitions ─────────────────────────────────────────────────────
+const TRADE_TYPES = [
+  {
+    id: "accumulators",
+    label: "Accumulators",
+    badge: "NEW!",
+    Icon: TrendingUp,
+    sub: null,
+  },
+  {
+    id: "vanillas",
+    label: "Vanillas",
+    badge: "NEW!",
+    Icon: BarChart2,
+    sub: "Call / Put",
+  },
+  {
+    id: "turbos",
+    label: "Turbos",
+    badge: "NEW!",
+    Icon: Zap,
+    sub: "Long / Short",
+  },
+  {
+    id: "multipliers",
+    label: "Multipliers",
+    badge: null,
+    Icon: Layers,
+    sub: "Multipliers",
+  },
+  {
+    id: "ups_downs",
+    label: "Ups & Downs",
+    badge: null,
+    Icon: ArrowUpDown,
+    sub: "Rise/Fall · Higher/Lower",
+  },
+  {
+    id: "touch",
+    label: "Touch & No Touch",
+    badge: null,
+    Icon: CircleDot,
+    sub: "Touch / No Touch",
+  },
+  {
+    id: "digits",
+    label: "Digits",
+    badge: null,
+    Icon: Hash,
+    sub: "Matches/Differs · Even/Odd · Over/Under",
+  },
+];
 
 type Tick = { time: string; value: number };
 
-// ── Right-edge price box (SVG label) ──────────────────────────────────────────
+// ── SVG price box label ────────────────────────────────────────────────────────
 const PriceBoxLabel = (props: any) => {
   const { viewBox, displayValue } = props;
   if (!viewBox) return null;
@@ -45,15 +173,19 @@ const PriceBoxLabel = (props: any) => {
   );
 };
 
-// ── Generic modal shell ───────────────────────────────────────────────────────
-function Modal({ title, onClose, children }: {
-  title: string; onClose: () => void; children: React.ReactNode;
+// ── Generic modal shell ────────────────────────────────────────────────────────
+function Modal({
+  title, onClose, children, fullscreen = false,
+}: {
+  title: string; onClose: () => void;
+  children: React.ReactNode; fullscreen?: boolean;
 }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <div className="relative bg-card border border-border rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4">
-        <div className="flex items-center justify-between">
+      <div className={`relative bg-card border border-border rounded-2xl shadow-2xl flex flex-col overflow-hidden
+        ${fullscreen ? "w-full max-w-lg h-[85vh]" : "w-full max-w-sm p-6 space-y-4"}`}>
+        <div className={`flex items-center justify-between flex-shrink-0 ${fullscreen ? "px-5 py-4 border-b border-border" : ""}`}>
           <h2 className="text-base font-bold text-foreground">{title}</h2>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
             <X className="w-5 h-5" />
@@ -65,27 +197,210 @@ function Modal({ title, onClose, children }: {
   );
 }
 
-// ── Risk Calculator modal ─────────────────────────────────────────────────────
+// ── Markets Modal ──────────────────────────────────────────────────────────────
+function MarketsModal({
+  onClose, selected, onSelect,
+}: { onClose: () => void; selected: Market; onSelect: (m: Market) => void }) {
+  const [query, setQuery]       = useState("");
+  const [favs, setFavs]         = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem(FAV_KEY) || "[]"); } catch { return []; }
+  });
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({
+    FX: true, "Stock Indices": true, Cryptocurrencies: true, Commodities: true,
+  });
+
+  const toggleFav = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setFavs(prev => {
+      const next = prev.includes(id) ? prev.filter(f => f !== id) : [...prev, id];
+      localStorage.setItem(FAV_KEY, JSON.stringify(next));
+      return next;
+    });
+  };
+
+  const allMarkets = [
+    ...CONTINUOUS, ...CRASH_BOOM, ...DAILY_RESET,
+    ...JUMP, ...STEP, ...RANGE_BREAK,
+  ];
+  const filtered = query.trim()
+    ? allMarkets.filter(m => m.label.toLowerCase().includes(query.toLowerCase()))
+    : null;
+
+  const favMarkets = allMarkets.filter(m => favs.includes(m.id));
+
+  const MarketRow = ({ m }: { m: Market }) => (
+    <button
+      onClick={() => { onSelect(m); onClose(); }}
+      className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-secondary transition-colors text-left ${
+        m.id === selected.id ? "bg-primary/8 text-primary font-semibold" : "text-foreground"
+      }`}
+    >
+      <span onClick={e => toggleFav(m.id, e)} className="flex-shrink-0">
+        <Star className={`w-4 h-4 transition-colors ${favs.includes(m.id)
+          ? "text-[#FACC15] fill-[#FACC15]" : "text-muted-foreground hover:text-[#FACC15]"}`} />
+      </span>
+      <div className="w-9 h-7 rounded bg-secondary flex items-center justify-center text-[10px] font-bold text-foreground border border-border flex-shrink-0">
+        {m.badge}
+      </div>
+      <span className="truncate">{m.label}</span>
+      {m.id === selected.id && <span className="ml-auto w-2 h-2 rounded-full bg-primary flex-shrink-0" />}
+    </button>
+  );
+
+  return (
+    <Modal title="Select Market" onClose={onClose} fullscreen>
+      {/* Search */}
+      <div className="px-4 py-3 border-b border-border flex-shrink-0">
+        <div className="flex items-center gap-2 bg-background border border-border rounded-lg px-3 py-2">
+          <Search className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+          <input
+            autoFocus
+            type="text"
+            placeholder="Search markets…"
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none"
+          />
+          {query && (
+            <button onClick={() => setQuery("")} className="text-muted-foreground hover:text-foreground">
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* List */}
+      <div className="overflow-y-auto flex-1 pb-4">
+        {/* Search results */}
+        {filtered ? (
+          <div>
+            <div className="px-4 py-2 text-xs text-muted-foreground font-medium uppercase tracking-wide border-b border-border">
+              Results ({filtered.length})
+            </div>
+            {filtered.length === 0
+              ? <p className="text-sm text-muted-foreground text-center py-8">No markets found</p>
+              : filtered.map(m => <MarketRow key={m.id} m={m} />)
+            }
+          </div>
+        ) : (
+          <>
+            {/* Favourites */}
+            {favMarkets.length > 0 && (
+              <div>
+                <div className="flex items-center gap-1.5 px-4 py-2.5 text-xs text-[#FACC15] font-semibold uppercase tracking-wide border-b border-border bg-[#FACC15]/5">
+                  <Star className="w-3.5 h-3.5 fill-[#FACC15]" />
+                  Favourites
+                </div>
+                {favMarkets.map(m => <MarketRow key={m.id} m={m} />)}
+              </div>
+            )}
+
+            {/* Synthetics → sub-groups */}
+            <div>
+              <div className="px-4 py-2.5 text-xs font-bold text-foreground uppercase tracking-wide border-b border-border bg-secondary/40">
+                Synthetics
+              </div>
+              {MARKET_GROUPS[0].subGroups.map(sg => (
+                <div key={sg.label}>
+                  <div className="px-4 py-2 text-xs text-muted-foreground font-semibold uppercase tracking-wide bg-secondary/20 border-b border-border/50">
+                    {sg.label}
+                  </div>
+                  {sg.items.map(m => <MarketRow key={m.id} m={m} />)}
+                </div>
+              ))}
+            </div>
+
+            {/* Collapsible groups */}
+            {["FX", "Stock Indices", "Cryptocurrencies", "Commodities"].map(cat => (
+              <div key={cat}>
+                <button
+                  onClick={() => setCollapsed(c => ({ ...c, [cat]: !c[cat] }))}
+                  className="w-full flex items-center justify-between px-4 py-2.5 text-xs font-bold text-foreground uppercase tracking-wide border-b border-border bg-secondary/40 hover:bg-secondary/60 transition-colors"
+                >
+                  {cat}
+                  {collapsed[cat]
+                    ? <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                    : <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                  }
+                </button>
+                {!collapsed[cat] && (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    No markets available
+                  </p>
+                )}
+              </div>
+            ))}
+          </>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+// ── Trade Types Modal ──────────────────────────────────────────────────────────
+function TradeTypesModal({
+  onClose, selected, onSelect,
+}: { onClose: () => void; selected: string; onSelect: (id: string) => void }) {
+  return (
+    <Modal title="Trade Types" onClose={onClose} fullscreen>
+      <div className="overflow-y-auto flex-1 py-2">
+        {TRADE_TYPES.map(tt => {
+          const { id, label, badge, Icon, sub } = tt;
+          const active = id === selected;
+          return (
+            <button
+              key={id}
+              onClick={() => { onSelect(id); onClose(); }}
+              className={`w-full flex items-center gap-4 px-5 py-4 border-b border-border/60 transition-colors text-left hover:bg-secondary/50 ${
+                active ? "bg-primary/8" : ""
+              }`}
+            >
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 border ${
+                active ? "bg-primary/15 border-primary/40 text-primary" : "bg-secondary border-border text-muted-foreground"
+              }`}>
+                <Icon className="w-5 h-5" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className={`text-sm font-semibold ${active ? "text-primary" : "text-foreground"}`}>
+                    {label}
+                  </span>
+                  {badge && (
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#22C55E]/15 text-[#22C55E] border border-[#22C55E]/30">
+                      {badge}
+                    </span>
+                  )}
+                </div>
+                {sub && <div className="text-xs text-muted-foreground mt-0.5">{sub}</div>}
+              </div>
+              {active && <span className="w-2.5 h-2.5 rounded-full bg-primary flex-shrink-0" />}
+            </button>
+          );
+        })}
+      </div>
+    </Modal>
+  );
+}
+
+// ── Risk Calculator Modal ──────────────────────────────────────────────────────
 function RiskCalcModal({ onClose, symId, currency }: {
   onClose: () => void; symId: string; currency: string;
 }) {
-  const [rStake, setRStake]       = useState(10);
-  const [rGrowth, setRGrowth]     = useState(3);
-  const [rPayout, setRPayout]     = useState<string | null>(null);
-  const [rTicks,  setRTicks]      = useState<string>("6,000");
+  const [rStake, setRStake]   = useState(10);
+  const [rGrowth, setRGrowth] = useState(3);
+  const [rPayout, setRPayout] = useState<string | null>(null);
+  const [rTicks,  setRTicks]  = useState<string>("6,000");
   const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
     if (wsRef.current) { wsRef.current.onclose = null; wsRef.current.close(); }
     const ws = new WebSocket(WS_URL);
     wsRef.current = ws;
-    ws.onopen = () => {
-      ws.send(JSON.stringify({
-        proposal: 1, amount: rStake, basis: "stake",
-        contract_type: "ACCU", currency: "USD",
-        growth_rate: rGrowth / 100, symbol: symId,
-      }));
-    };
+    ws.onopen = () => ws.send(JSON.stringify({
+      proposal: 1, amount: rStake, basis: "stake",
+      contract_type: "ACCU", currency: "USD",
+      growth_rate: rGrowth / 100, symbol: symId,
+    }));
     ws.onmessage = (evt) => {
       try {
         const msg = JSON.parse(evt.data);
@@ -105,8 +420,7 @@ function RiskCalcModal({ onClose, symId, currency }: {
       <div className="space-y-4">
         <div className="space-y-1.5">
           <label className="text-xs text-muted-foreground font-medium">Stake ({currency})</label>
-          <input
-            type="number" min={MIN_STAKE} step={STAKE_STEP} value={rStake}
+          <input type="number" min={MIN_STAKE} step={STAKE_STEP} value={rStake}
             onChange={e => setRStake(Math.max(MIN_STAKE, +e.target.value || MIN_STAKE))}
             className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground outline-none focus:border-primary"
           />
@@ -141,7 +455,7 @@ function RiskCalcModal({ onClose, symId, currency }: {
   );
 }
 
-// ── Learn modal ───────────────────────────────────────────────────────────────
+// ── Learn Modal ────────────────────────────────────────────────────────────────
 function LearnModal({ onClose }: { onClose: () => void }) {
   return (
     <Modal title="About Accumulators" onClose={onClose}>
@@ -164,16 +478,42 @@ function LearnModal({ onClose }: { onClose: () => void }) {
   );
 }
 
+// ── "Coming soon" panel for non-Accumulator trade types ───────────────────────
+function ComingSoonPanel({ tradeType }: { tradeType: string }) {
+  const tt = TRADE_TYPES.find(t => t.id === tradeType);
+  if (!tt) return null;
+  const { Icon, label, sub } = tt;
+  return (
+    <div className="flex flex-col items-center justify-center py-12 gap-4 text-center">
+      <div className="w-16 h-16 rounded-2xl bg-secondary flex items-center justify-center border border-border">
+        <Icon className="w-8 h-8 text-muted-foreground" />
+      </div>
+      <div>
+        <div className="text-base font-bold text-foreground">{label}</div>
+        {sub && <div className="text-sm text-muted-foreground mt-1">{sub}</div>}
+      </div>
+      <div className="px-4 py-2 bg-secondary/50 rounded-lg text-sm text-muted-foreground border border-border">
+        This trade type is coming soon
+      </div>
+    </div>
+  );
+}
+
 // ── Main component ─────────────────────────────────────────────────────────────
+const DEFAULT_MARKET = CONTINUOUS[0]; // Volatility 10 (1s)
+
 export default function ManualTraders() {
   const { isLoggedIn, currency, sendWS } = useAuth();
 
-  const [sym, setSym]               = useState(SYMBOLS[4]);
-  const [showDropdown, setDropdown] = useState(false);
-  const [ticks, setTicks]           = useState<Tick[]>([]);
-  const [price, setPrice]           = useState<number | null>(null);
-  const [prevPrice, setPrevPrice]   = useState<number | null>(null);
-  const [connected, setConnected]   = useState(false);
+  const [sym, setSym]               = useState<Market>(DEFAULT_MARKET);
+  const [showMarketsModal, setMarketsModal] = useState(false);
+  const [showTradeTypes,   setTradeTypes]   = useState(false);
+  const [tradeType,        setTradeType]    = useState("accumulators");
+
+  const [ticks, setTicks]         = useState<Tick[]>([]);
+  const [price, setPrice]         = useState<number | null>(null);
+  const [prevPrice, setPrevPrice] = useState<number | null>(null);
+  const [connected, setConnected] = useState(false);
 
   const [growthRate, setGrowthRate]       = useState(3);
   const [stake, setStake]                 = useState(10);
@@ -186,7 +526,6 @@ export default function ManualTraders() {
   const [showLearn, setShowLearn]       = useState(false);
 
   const [gmt, setGmt] = useState(() => new Date().toUTCString().slice(0, -3) + "GMT");
-
   useEffect(() => {
     const id = setInterval(() => setGmt(new Date().toUTCString().slice(0, -3) + "GMT"), 1_000);
     return () => clearInterval(id);
@@ -210,10 +549,8 @@ export default function ManualTraders() {
     if (!mountRef.current) return;
     clearTimers();
     if (wsRef.current) { wsRef.current.onclose = null; wsRef.current.close(); }
-
     const ws = new WebSocket(WS_URL);
     wsRef.current = ws;
-
     ws.onopen = () => {
       if (!mountRef.current) return;
       ws.send(JSON.stringify({
@@ -229,7 +566,6 @@ export default function ManualTraders() {
         if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ ping: 1 }));
       }, PING_INTERVAL);
     };
-
     ws.onmessage = (evt) => {
       if (!mountRef.current) return;
       try {
@@ -239,7 +575,6 @@ export default function ManualTraders() {
           retryRef.current = setTimeout(connect, RETRY_DELAY); return;
         }
         if (msg.msg_type === "pong") return;
-
         if (msg.msg_type === "history") {
           if (histRef.current) { clearTimeout(histRef.current); histRef.current = null; }
           const { prices, times } = msg.history as { prices: number[]; times: number[] };
@@ -255,7 +590,6 @@ export default function ManualTraders() {
           }
           setConnected(true);
         }
-
         if (msg.msg_type === "tick") {
           const quote: number = msg.tick.quote;
           const epoch: number = msg.tick.epoch;
@@ -273,7 +607,6 @@ export default function ManualTraders() {
         }
       } catch (_) {}
     };
-
     ws.onerror  = () => { if (mountRef.current) setConnected(false); };
     ws.onclose  = () => {
       if (!mountRef.current) return;
@@ -294,19 +627,18 @@ export default function ManualTraders() {
     };
   }, [sym.id, connect, clearTimers]);
 
-  // ── Proposal WebSocket (max payout / max ticks) ─────────────────────────────
+  // ── Proposal WebSocket ──────────────────────────────────────────────────────
   const wsPropRef = useRef<WebSocket | null>(null);
   useEffect(() => {
+    if (tradeType !== "accumulators") return;
     if (wsPropRef.current) { wsPropRef.current.onclose = null; wsPropRef.current.close(); }
     const ws = new WebSocket(WS_URL);
     wsPropRef.current = ws;
-    ws.onopen = () => {
-      ws.send(JSON.stringify({
-        proposal: 1, amount: stake, basis: "stake",
-        contract_type: "ACCU", currency: "USD",
-        growth_rate: growthRate / 100, symbol: sym.id,
-      }));
-    };
+    ws.onopen = () => ws.send(JSON.stringify({
+      proposal: 1, amount: stake, basis: "stake",
+      contract_type: "ACCU", currency: "USD",
+      growth_rate: growthRate / 100, symbol: sym.id,
+    }));
     ws.onmessage = (evt) => {
       try {
         const msg = JSON.parse(evt.data);
@@ -321,10 +653,11 @@ export default function ManualTraders() {
     return () => {
       if (wsPropRef.current) { wsPropRef.current.onclose = null; wsPropRef.current.close(); }
     };
-  }, [stake, growthRate, sym.id]);
+  }, [stake, growthRate, sym.id, tradeType]);
 
   // ── Derived chart values ────────────────────────────────────────────────────
-  const delta     = price != null ? price * growthRate / 100 : 0;
+  // Band formula: price × (growthRate/100) × 0.1
+  const delta     = price != null ? price * (growthRate / 100) * 0.1 : 0;
   const upperBand = price != null ? price + delta : null;
   const lowerBand = price != null ? price - delta : null;
   const priceChange = price != null && prevPrice != null ? price - prevPrice : null;
@@ -335,15 +668,13 @@ export default function ManualTraders() {
   const maxV   = values.length ? Math.max(...values) : 0;
   const pad    = ((maxV - minV) * 0.2) || 1;
 
+  const tradeTypeMeta = TRADE_TYPES.find(t => t.id === tradeType);
+
   // ── BUY ────────────────────────────────────────────────────────────────────
   const handleBuy = () => {
-    if (!isLoggedIn) {
-      window.location.href = LOGIN_URL;
-      return;
-    }
+    if (!isLoggedIn) { window.location.href = LOGIN_URL; return; }
     sendWS({
-      buy: "1",
-      price: stake,
+      buy: "1", price: stake,
       parameters: {
         amount: stake, basis: "stake", contract_type: "ACCU",
         currency, growth_rate: growthRate / 100, symbol: sym.id,
@@ -355,75 +686,64 @@ export default function ManualTraders() {
   const inc = () => setStake(s => +(s + STAKE_STEP).toFixed(2));
 
   return (
-    <div className="flex flex-col min-h-[calc(100vh-64px)] bg-background pb-6"
-      onClick={() => setDropdown(false)}>
+    <div className="flex flex-col min-h-[calc(100vh-64px)] bg-background pb-6">
 
       {/* ── Modals ──────────────────────────────────────────────────────────── */}
-      {showRiskCalc && (
-        <RiskCalcModal
-          onClose={() => setShowRiskCalc(false)}
-          symId={sym.id}
-          currency={currency}
+      {showMarketsModal && (
+        <MarketsModal
+          selected={sym}
+          onSelect={m => { setSym(m); }}
+          onClose={() => setMarketsModal(false)}
         />
+      )}
+      {showTradeTypes && (
+        <TradeTypesModal
+          selected={tradeType}
+          onSelect={setTradeType}
+          onClose={() => setTradeTypes(false)}
+        />
+      )}
+      {showRiskCalc && (
+        <RiskCalcModal onClose={() => setShowRiskCalc(false)} symId={sym.id} currency={currency} />
       )}
       {showLearn && <LearnModal onClose={() => setShowLearn(false)} />}
 
       {/* ── Header ──────────────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between px-4 pt-4 pb-3 flex-wrap gap-3">
 
-        {/* Market selector */}
-        <div className="relative" onClick={e => e.stopPropagation()}>
-          <button
-            onClick={() => setDropdown(p => !p)}
-            className="flex items-center gap-2.5 bg-card border border-border rounded-xl px-3.5 py-2.5 hover:border-primary/60 transition-colors shadow-sm"
-          >
-            <div className="flex items-center gap-1.5">
-              <span className={`w-2 h-2 rounded-full ${connected ? "bg-[#EF4444]" : "bg-muted-foreground animate-pulse"}`} />
-              <div className="w-8 h-8 rounded-lg bg-secondary flex items-center justify-center text-xs font-bold text-foreground border border-border">
-                {sym.badge}
+        {/* Market selector → opens full modal */}
+        <button
+          onClick={() => setMarketsModal(true)}
+          className="flex items-center gap-2.5 bg-card border border-border rounded-xl px-3.5 py-2.5 hover:border-primary/60 transition-colors shadow-sm"
+        >
+          <div className="flex items-center gap-1.5">
+            <span className={`w-2 h-2 rounded-full ${connected ? "bg-[#EF4444]" : "bg-muted-foreground animate-pulse"}`} />
+            <div className="w-8 h-8 rounded-lg bg-secondary flex items-center justify-center text-xs font-bold text-foreground border border-border">
+              {sym.badge}
+            </div>
+            <BarChart2 className="w-4 h-4 text-muted-foreground" />
+          </div>
+          <div className="text-left min-w-0">
+            <div className="text-sm font-semibold text-foreground leading-tight truncate max-w-[180px]">
+              {sym.label}
+            </div>
+            {price != null ? (
+              <div className={`text-xs font-mono flex items-center gap-1 mt-0.5 ${priceUp === false ? "text-[#EF4444]" : "text-[#22C55E]"}`}>
+                <span>{price.toFixed(2)}</span>
+                {priceChange != null && prevPrice != null && (
+                  <span>
+                    {priceUp ? "▲" : "▼"}{" "}
+                    {Math.abs(priceChange).toFixed(2)}{" "}
+                    ({Math.abs(priceChange / prevPrice * 100).toFixed(2)}%)
+                  </span>
+                )}
               </div>
-              <BarChart2 className="w-4 h-4 text-muted-foreground" />
-            </div>
-            <div className="text-left min-w-0">
-              <div className="text-sm font-semibold text-foreground leading-tight truncate max-w-[180px]">
-                {sym.label}
-              </div>
-              {price != null ? (
-                <div className={`text-xs font-mono flex items-center gap-1 mt-0.5 ${priceUp === false ? "text-[#EF4444]" : "text-[#22C55E]"}`}>
-                  <span>{price.toFixed(2)}</span>
-                  {priceChange != null && prevPrice != null && (
-                    <span>
-                      {priceUp ? "▲" : "▼"}
-                      {" "}{Math.abs(priceChange).toFixed(2)}
-                      {" "}({Math.abs(priceChange / prevPrice * 100).toFixed(2)}%)
-                    </span>
-                  )}
-                </div>
-              ) : (
-                <div className="text-xs text-muted-foreground mt-0.5">Connecting…</div>
-              )}
-            </div>
-            <span className="text-muted-foreground text-[10px] ml-0.5">▼</span>
-          </button>
-
-          {/* Dropdown */}
-          {showDropdown && (
-            <div className="absolute top-full left-0 mt-1 z-50 bg-card border border-border rounded-xl shadow-2xl overflow-hidden min-w-[230px]">
-              {SYMBOLS.map(s => (
-                <button
-                  key={s.id}
-                  onClick={() => { setSym(s); setDropdown(false); }}
-                  className={`w-full px-4 py-2.5 text-left text-sm hover:bg-secondary transition-colors flex items-center gap-2.5 ${
-                    s.id === sym.id ? "text-primary font-semibold bg-primary/5" : "text-foreground"
-                  }`}
-                >
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#EF4444] flex-shrink-0" />
-                  {s.label}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+            ) : (
+              <div className="text-xs text-muted-foreground mt-0.5">Connecting…</div>
+            )}
+          </div>
+          <span className="text-muted-foreground text-[10px] ml-0.5">▼</span>
+        </button>
 
         {/* Risk Calculator */}
         <button
@@ -459,14 +779,16 @@ export default function ManualTraders() {
                   tickFormatter={(v: number) => v.toFixed(2)}
                 />
 
-                {/* Accumulator zone — updates live with growthRate */}
-                {upperBand != null && lowerBand != null && (
+                {/* Accumulator bands: price ± price×(growth/100)×0.1 */}
+                {upperBand != null && lowerBand != null && tradeType === "accumulators" && (
                   <>
                     <ReferenceArea y1={lowerBand} y2={upperBand} fill="#3B82F6" fillOpacity={0.12} />
                     <ReferenceLine y={upperBand} stroke="#3B82F6" strokeDasharray="3 3" strokeWidth={1}
-                      label={{ value: `+${delta.toFixed(2)}`, position: "insideTopRight", fill: "#3B82F6", fontSize: 10, fontWeight: "bold" }} />
+                      label={{ value: `+${delta.toFixed(4)}`, position: "insideTopRight",
+                        fill: "#3B82F6", fontSize: 10, fontWeight: "bold" }} />
                     <ReferenceLine y={lowerBand} stroke="#3B82F6" strokeDasharray="3 3" strokeWidth={1}
-                      label={{ value: `-${delta.toFixed(2)}`, position: "insideBottomRight", fill: "#3B82F6", fontSize: 10, fontWeight: "bold" }} />
+                      label={{ value: `-${delta.toFixed(4)}`, position: "insideBottomRight",
+                        fill: "#3B82F6", fontSize: 10, fontWeight: "bold" }} />
                   </>
                 )}
 
@@ -497,117 +819,116 @@ export default function ManualTraders() {
             <span className="text-sm text-primary font-medium">Learn about this trade type</span>
           </button>
 
-          {/* Trade type row */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+          {/* Trade type row → opens trade types modal */}
+          <button
+            onClick={() => setTradeTypes(true)}
+            className="w-full flex items-center justify-between px-4 py-3 border-b border-border hover:bg-secondary/50 transition-colors"
+          >
             <div className="flex items-center gap-2">
-              <TrendingUp className="w-4 h-4 text-muted-foreground" />
-              <span className="text-sm font-semibold text-foreground">Accumulators</span>
+              {tradeTypeMeta && <tradeTypeMeta.Icon className="w-4 h-4 text-muted-foreground" />}
+              <span className="text-sm font-semibold text-foreground">{tradeTypeMeta?.label ?? "Accumulators"}</span>
+              {tradeTypeMeta?.badge && (
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#22C55E]/15 text-[#22C55E] border border-[#22C55E]/30">
+                  {tradeTypeMeta.badge}
+                </span>
+              )}
             </div>
             <div className="flex items-center gap-1.5 text-sm">
-              <span className="font-semibold text-foreground">{growthRate}%</span>
+              {tradeType === "accumulators" && (
+                <span className="font-semibold text-foreground">{growthRate}%</span>
+              )}
               <span className="text-muted-foreground text-base">›</span>
             </div>
-          </div>
+          </button>
 
-          {/* Growth rate — clicking selects, updates chart bands + proposal */}
-          <div className="px-4 pt-3 pb-4 border-b border-border">
-            <div className="text-xs text-muted-foreground mb-2.5 font-medium uppercase tracking-wide">
-              Growth rate
-            </div>
-            <div className="flex gap-2">
-              {[1, 2, 3, 4, 5].map(r => (
-                <button
-                  key={r}
-                  onClick={() => setGrowthRate(r)}
-                  className={`flex-1 py-2 rounded-lg text-sm font-bold border transition-all ${
-                    growthRate === r
-                      ? "bg-foreground text-background border-foreground shadow-sm"
-                      : "bg-background text-muted-foreground border-border hover:border-primary hover:text-primary"
-                  }`}
-                >
-                  {r}%
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Stake — step 1, min 0.35 */}
-          <div className="flex items-center gap-3 px-4 py-3.5 border-b border-border">
-            <button
-              onClick={dec}
-              className="w-11 h-11 rounded-full border border-border flex items-center justify-center text-foreground hover:bg-secondary text-xl font-bold transition-colors flex-shrink-0"
-            >
-              −
-            </button>
-            <div className="flex-1 text-center">
-              <div className="text-2xl font-bold text-foreground">{stake}</div>
-              <div className="text-xs text-muted-foreground mt-0.5">Stake</div>
-            </div>
-            <button
-              onClick={inc}
-              className="w-11 h-11 rounded-full border border-border flex items-center justify-center text-foreground hover:bg-secondary text-xl font-bold transition-colors flex-shrink-0"
-            >
-              +
-            </button>
-          </div>
-
-          {/* Take profit — shows amount input when checked */}
-          <div className={`border-b border-border ${takeProfit ? "" : ""}`}>
-            <div className="flex items-center justify-between px-4 py-3">
-              <label className="flex items-center gap-2.5 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={takeProfit}
-                  onChange={e => setTakeProfit(e.target.checked)}
-                  className="w-4 h-4 accent-primary"
-                />
-                <span className="text-sm text-foreground">Take profit</span>
-              </label>
-              <Info className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-            </div>
-            {takeProfit && (
-              <div className="px-4 pb-3 space-y-1.5">
-                <div className="text-xs text-muted-foreground font-medium">Take profit amount ({currency})</div>
-                <div className="flex items-center gap-2 border border-border rounded-lg overflow-hidden bg-background">
-                  <button
-                    onClick={() => setTakeProfitAmt(a => Math.max(1, +(a - 1).toFixed(2)))}
-                    className="px-3 py-2 text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors text-lg font-bold"
-                  >−</button>
-                  <input
-                    type="number" min={1} step={1} value={takeProfitAmt}
-                    onChange={e => setTakeProfitAmt(Math.max(1, +e.target.value || 1))}
-                    className="flex-1 text-center text-sm font-semibold text-foreground bg-transparent border-none outline-none"
-                  />
-                  <button
-                    onClick={() => setTakeProfitAmt(a => +(a + 1).toFixed(2))}
-                    className="px-3 py-2 text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors text-lg font-bold"
-                  >+</button>
+          {/* Accumulator-specific controls */}
+          {tradeType === "accumulators" ? (
+            <>
+              {/* Growth rate */}
+              <div className="px-4 pt-3 pb-4 border-b border-border">
+                <div className="text-xs text-muted-foreground mb-2.5 font-medium uppercase tracking-wide">
+                  Growth rate
+                </div>
+                <div className="flex gap-2">
+                  {[1, 2, 3, 4, 5].map(r => (
+                    <button key={r} onClick={() => setGrowthRate(r)}
+                      className={`flex-1 py-2 rounded-lg text-sm font-bold border transition-all ${
+                        growthRate === r
+                          ? "bg-foreground text-background border-foreground shadow-sm"
+                          : "bg-background text-muted-foreground border-border hover:border-primary hover:text-primary"
+                      }`}>
+                      {r}%
+                    </button>
+                  ))}
                 </div>
               </div>
-            )}
-          </div>
 
-          {/* Max. payout — from proposal API, updates with stake + growthRate + symbol */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-            <span className="text-sm text-muted-foreground">Max. payout</span>
-            <span className="text-sm font-semibold text-foreground">
-              {maxPayout != null ? `${maxPayout} ${currency}` : "—"}
-            </span>
-          </div>
+              {/* Stake */}
+              <div className="flex items-center gap-3 px-4 py-3.5 border-b border-border">
+                <button onClick={dec}
+                  className="w-11 h-11 rounded-full border border-border flex items-center justify-center text-foreground hover:bg-secondary text-xl font-bold transition-colors flex-shrink-0">
+                  −
+                </button>
+                <div className="flex-1 text-center">
+                  <div className="text-2xl font-bold text-foreground">{stake}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">Stake</div>
+                </div>
+                <button onClick={inc}
+                  className="w-11 h-11 rounded-full border border-border flex items-center justify-center text-foreground hover:bg-secondary text-xl font-bold transition-colors flex-shrink-0">
+                  +
+                </button>
+              </div>
 
-          {/* Max. ticks */}
-          <div className="flex items-center justify-between px-4 py-3">
-            <span className="text-sm text-muted-foreground">Max. ticks</span>
-            <span className="text-sm font-semibold text-foreground">{maxTicks}</span>
-          </div>
+              {/* Take profit */}
+              <div className="border-b border-border">
+                <div className="flex items-center justify-between px-4 py-3">
+                  <label className="flex items-center gap-2.5 cursor-pointer">
+                    <input type="checkbox" checked={takeProfit}
+                      onChange={e => setTakeProfit(e.target.checked)}
+                      className="w-4 h-4 accent-primary" />
+                    <span className="text-sm text-foreground">Take profit</span>
+                  </label>
+                  <Info className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                </div>
+                {takeProfit && (
+                  <div className="px-4 pb-3 space-y-1.5">
+                    <div className="text-xs text-muted-foreground font-medium">Take profit amount ({currency})</div>
+                    <div className="flex items-center gap-2 border border-border rounded-lg overflow-hidden bg-background">
+                      <button onClick={() => setTakeProfitAmt(a => Math.max(1, +(a - 1).toFixed(2)))}
+                        className="px-3 py-2 text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors text-lg font-bold">−</button>
+                      <input type="number" min={1} step={1} value={takeProfitAmt}
+                        onChange={e => setTakeProfitAmt(Math.max(1, +e.target.value || 1))}
+                        className="flex-1 text-center text-sm font-semibold text-foreground bg-transparent border-none outline-none" />
+                      <button onClick={() => setTakeProfitAmt(a => +(a + 1).toFixed(2))}
+                        className="px-3 py-2 text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors text-lg font-bold">+</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Max. payout */}
+              <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+                <span className="text-sm text-muted-foreground">Max. payout</span>
+                <span className="text-sm font-semibold text-foreground">
+                  {maxPayout != null ? `${maxPayout} ${currency}` : "—"}
+                </span>
+              </div>
+
+              {/* Max. ticks */}
+              <div className="flex items-center justify-between px-4 py-3">
+                <span className="text-sm text-muted-foreground">Max. ticks</span>
+                <span className="text-sm font-semibold text-foreground">{maxTicks}</span>
+              </div>
+            </>
+          ) : (
+            <ComingSoonPanel tradeType={tradeType} />
+          )}
         </div>
 
         {/* BUY */}
-        <button
-          onClick={handleBuy}
+        <button onClick={handleBuy}
           className="w-full py-4 rounded-xl font-bold text-white text-base flex items-center justify-center gap-2.5 transition-all active:scale-[0.98] shadow-lg"
-          style={{ background: "#22C55E" }}
-        >
+          style={{ background: "#22C55E" }}>
           <TrendingUp className="w-5 h-5" />
           {isLoggedIn ? "Buy" : "Log in to trade"}
         </button>
