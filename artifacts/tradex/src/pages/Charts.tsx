@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import {
-  AreaChart, Area, XAxis, YAxis, ReferenceLine,
-  ResponsiveContainer,
+  LineChart, Line, XAxis, YAxis, CartesianGrid, ReferenceLine, ResponsiveContainer,
 } from "recharts";
 import {
   X, Search, Star, CandlestickChart, ChevronDown, ChevronRight,
@@ -19,159 +18,104 @@ const FAV_KEY       = "tradex-charts-fav-markets";
 // ── Market definitions ─────────────────────────────────────────────────────────
 interface Market { id: string; label: string; badge: string }
 
-const mkts = (list: [string, string, string][]): Market[] =>
-  list.map(([id, label, badge]) => ({ id, label, badge }));
+const mk = (id: string, label: string, badge: string): Market => ({ id, label, badge });
 
-const COMMODITIES_BASKET = mkts([
-  ["WLDGOLD", "Gold Basket", "GLD"],
-]);
-const FOREX_BASKET = mkts([
-  ["WLDAUD", "AUD Basket", "AUD"],
-  ["WLDEUR", "EUR Basket", "EUR"],
-  ["WLDGBP", "GBP Basket", "GBP"],
-  ["WLDUSD", "USD Basket", "USD"],
-]);
-const CONTINUOUS = mkts([
-  ["1HZ10V",  "Volatility 10 (1s) Index",  "10"],
-  ["R_10",    "Volatility 10 Index",        "10"],
-  ["1HZ15V",  "Volatility 15 (1s) Index",  "15"],
-  ["1HZ25V",  "Volatility 25 (1s) Index",  "25"],
-  ["R_25",    "Volatility 25 Index",        "25"],
-  ["1HZ30V",  "Volatility 30 (1s) Index",  "30"],
-  ["1HZ50V",  "Volatility 50 (1s) Index",  "50"],
-  ["R_50",    "Volatility 50 Index",        "50"],
-  ["1HZ75V",  "Volatility 75 (1s) Index",  "75"],
-  ["R_75",    "Volatility 75 Index",        "75"],
-  ["1HZ90V",  "Volatility 90 (1s) Index",  "90"],
-  ["1HZ100V", "Volatility 100 (1s) Index", "100"],
-  ["R_100",   "Volatility 100 Index",       "100"],
-]);
-const CRASH_BOOM = mkts([
-  ["BOOM50N",    "Boom 50 Index",    "B50"],
-  ["BOOM150N",   "Boom 150 Index",   "B150"],
-  ["BOOM300N",   "Boom 300 Index",   "B300"],
-  ["BOOM500N",   "Boom 500 Index",   "B500"],
-  ["BOOM600N",   "Boom 600 Index",   "B600"],
-  ["BOOM900N",   "Boom 900 Index",   "B900"],
-  ["BOOM1000N",  "Boom 1000 Index",  "B1K"],
-  ["CRASH50N",   "Crash 50 Index",   "C50"],
-  ["CRASH300N",  "Crash 300 Index",  "C300"],
-  ["CRASH500N",  "Crash 500 Index",  "C500"],
-  ["CRASH600N",  "Crash 600 Index",  "C600"],
-  ["CRASH900N",  "Crash 900 Index",  "C900"],
-  ["CRASH1000N", "Crash 1000 Index", "C1K"],
-]);
-const DAILY_RESET = mkts([
-  ["BRMIDX", "Bear Market Index", "BEAR"],
-  ["BULIDX", "Bull Market Index", "BULL"],
-]);
-const JUMP = mkts([
-  ["JD10",  "Jump 10 Index",  "J10"],
-  ["JD25",  "Jump 25 Index",  "J25"],
-  ["JD50",  "Jump 50 Index",  "J50"],
-  ["JD75",  "Jump 75 Index",  "J75"],
-  ["JD100", "Jump 100 Index", "J100"],
-]);
-const RANGE_BREAK = mkts([
-  ["RB100", "Range Break 100 Index", "RB100"],
-  ["RB200", "Range Break 200 Index", "RB200"],
-]);
-const STEP = mkts([
-  ["stpRNG100", "Step Index 100", "S100"],
-  ["stpRNG200", "Step Index 200", "S200"],
-  ["stpRNG300", "Step Index 300", "S300"],
-  ["stpRNG400", "Step Index 400", "S400"],
-  ["stpRNG500", "Step Index 500", "S500"],
-]);
-const MAJOR_PAIRS = mkts([
-  ["frxAUDJPY", "AUD/JPY", "AUDJPY"],
-  ["frxAUDUSD", "AUD/USD", "AUDUSD"],
-  ["frxEURAUD", "EUR/AUD", "EURAUD"],
-  ["frxEURCAD", "EUR/CAD", "EURCAD"],
-  ["frxEURCHF", "EUR/CHF", "EURCHF"],
-  ["frxEURGBP", "EUR/GBP", "EURGBP"],
-  ["frxEURJPY", "EUR/JPY", "EURJPY"],
-  ["frxEURUSD", "EUR/USD", "EURUSD"],
-  ["frxGBPJPY", "GBP/JPY", "GBPJPY"],
-  ["frxGBPUSD", "GBP/USD", "GBPUSD"],
-  ["frxUSDCAD", "USD/CAD", "USDCAD"],
-  ["frxUSDCHF", "USD/CHF", "USDCHF"],
-  ["frxUSDJPY", "USD/JPY", "USDJPY"],
-]);
-const MINOR_PAIRS = mkts([
-  ["frxAUDCHF", "AUD/CHF", "AUDCHF"],
-  ["frxAUDNZD", "AUD/NZD", "AUDNZD"],
-  ["frxEURNZD", "EUR/NZD", "EURNZD"],
-  ["frxGBPAUD", "GBP/AUD", "GBPAUD"],
-  ["frxGBPCHF", "GBP/CHF", "GBPCHF"],
-  ["frxGBPNOK", "GBP/NOK", "GBPNOK"],
-  ["frxGBPNZD", "GBP/NZD", "GBPNZD"],
-  ["frxNZDJPY", "NZD/JPY", "NZDJPY"],
-  ["frxNZDUSD", "NZD/USD", "NZDUSD"],
-  ["frxUSDMXN", "USD/MXN", "USDMXN"],
-  ["frxUSDNOK", "USD/NOK", "USDNOK"],
-  ["frxUSDPLN", "USD/PLN", "USDPLN"],
-  ["frxUSDSEK", "USD/SEK", "USDSEK"],
-]);
-const AMERICAN_INDICES = mkts([
-  ["SPC",      "US 500",       "US500"],
-  ["USTECH100","US Tech 100",  "NAS"],
-  ["DJI",      "Wall Street 30","DJ30"],
-]);
-const ASIAN_INDICES = mkts([
-  ["AS51", "Australia 200", "AUS200"],
-  ["HSI",  "Hong Kong 50",  "HK50"],
-  ["N225", "Japan 225",     "JPN225"],
-]);
-const EUROPEAN_INDICES = mkts([
-  ["CAC",   "France 40",      "FR40"],
-  ["GER40", "Germany 40",     "GER40"],
-  ["AEX",   "Netherlands 25", "NL25"],
-  ["SMI",   "Swiss 20",       "CH20"],
-  ["UK100", "UK 100",         "UK100"],
-]);
-const CRYPTOS = mkts([
-  ["cryBTCUSD", "BTC/USD", "BTC"],
-  ["cryETHUSD", "ETH/USD", "ETH"],
-]);
-const METALS = mkts([
-  ["frxXAUAUD", "Gold/AUD",     "XAUAUD"],
-  ["frxXAUUSD", "Gold/USD",     "XAUUSD"],
-  ["frxXPTUSD", "Platinum/USD", "XPTUSD"],
-  ["frxXAGUSD", "Silver/USD",   "XAGUSD"],
-]);
-
-const ALL_GROUPS = [
-  { label: "Commodities Basket",  items: COMMODITIES_BASKET  },
-  { label: "Forex Basket",        items: FOREX_BASKET        },
-  { label: "Continuous Indices",  items: CONTINUOUS          },
-  { label: "Crash/Boom Indices",  items: CRASH_BOOM          },
-  { label: "Daily Reset Indices", items: DAILY_RESET         },
-  { label: "Jump Indices",        items: JUMP                },
-  { label: "Range Break Indices", items: RANGE_BREAK         },
-  { label: "Step Indices",        items: STEP                },
-  { label: "Major Pairs",         items: MAJOR_PAIRS         },
-  { label: "Minor Pairs",         items: MINOR_PAIRS         },
-  { label: "American Indices",    items: AMERICAN_INDICES    },
-  { label: "Asian Indices",       items: ASIAN_INDICES       },
-  { label: "European Indices",    items: EUROPEAN_INDICES    },
-  { label: "Cryptocurrencies",    items: CRYPTOS             },
-  { label: "Metals",              items: METALS              },
+const COMMODITIES_BASKET = [mk("WLDGOLD","Gold Basket","GLD")];
+const FOREX_BASKET = [
+  mk("WLDAUD","AUD Basket","AUD"),mk("WLDEUR","EUR Basket","EUR"),
+  mk("WLDGBP","GBP Basket","GBP"),mk("WLDUSD","USD Basket","USD"),
+];
+const CONTINUOUS = [
+  mk("1HZ10V","Volatility 10 (1s) Index","10"),mk("R_10","Volatility 10 Index","10"),
+  mk("1HZ25V","Volatility 25 (1s) Index","25"),mk("R_25","Volatility 25 Index","25"),
+  mk("1HZ50V","Volatility 50 (1s) Index","50"),mk("R_50","Volatility 50 Index","50"),
+  mk("1HZ75V","Volatility 75 (1s) Index","75"),mk("R_75","Volatility 75 Index","75"),
+  mk("1HZ100V","Volatility 100 (1s) Index","100"),mk("R_100","Volatility 100 Index","100"),
+  mk("1HZ150V","Volatility 150 (1s) Index","150"),
+  mk("1HZ200V","Volatility 200 (1s) Index","200"),
+  mk("1HZ250V","Volatility 250 (1s) Index","250"),
+];
+const CRASH_BOOM = [
+  mk("BOOM300N","Boom 300 Index","B300"),mk("BOOM500N","Boom 500 Index","B500"),
+  mk("BOOM600N","Boom 600 Index","B600"),mk("BOOM900N","Boom 900 Index","B900"),
+  mk("BOOM1000N","Boom 1000 Index","B1K"),
+  mk("CRASH300N","Crash 300 Index","C300"),mk("CRASH500N","Crash 500 Index","C500"),
+  mk("CRASH600N","Crash 600 Index","C600"),mk("CRASH900N","Crash 900 Index","C900"),
+  mk("CRASH1000N","Crash 1000 Index","C1K"),
+];
+const DAILY_RESET = [mk("BRMIDX","Bear Market Index","BEAR"),mk("BULIDX","Bull Market Index","BULL")];
+const JUMP = [
+  mk("JD10","Jump 10 Index","J10"),mk("JD25","Jump 25 Index","J25"),
+  mk("JD50","Jump 50 Index","J50"),mk("JD75","Jump 75 Index","J75"),
+  mk("JD100","Jump 100 Index","J100"),
+];
+const RANGE_BREAK = [mk("RB100","Range Break 100 Index","RB100"),mk("RB200","Range Break 200 Index","RB200")];
+const STEP = [
+  mk("stpRNG100","Step Index 100","S100"),mk("stpRNG200","Step Index 200","S200"),
+  mk("stpRNG300","Step Index 300","S300"),mk("stpRNG400","Step Index 400","S400"),
+  mk("stpRNG500","Step Index 500","S500"),
+];
+const MAJOR_PAIRS = [
+  mk("frxAUDJPY","AUD/JPY","AUDJPY"),mk("frxAUDUSD","AUD/USD","AUDUSD"),
+  mk("frxEURAUD","EUR/AUD","EURAUD"),mk("frxEURCAD","EUR/CAD","EURCAD"),
+  mk("frxEURCHF","EUR/CHF","EURCHF"),mk("frxEURGBP","EUR/GBP","EURGBP"),
+  mk("frxEURJPY","EUR/JPY","EURJPY"),mk("frxEURUSD","EUR/USD","EURUSD"),
+  mk("frxGBPAUD","GBP/AUD","GBPAUD"),mk("frxGBPJPY","GBP/JPY","GBPJPY"),
+  mk("frxGBPUSD","GBP/USD","GBPUSD"),mk("frxUSDCAD","USD/CAD","USDCAD"),
+  mk("frxUSDCHF","USD/CHF","USDCHF"),mk("frxUSDJPY","USD/JPY","USDJPY"),
+];
+const MINOR_PAIRS = [
+  mk("frxAUDCHF","AUD/CHF","AUDCHF"),mk("frxAUDNZD","AUD/NZD","AUDNZD"),
+  mk("frxEURNZD","EUR/NZD","EURNZD"),mk("frxGBPCAD","GBP/CAD","GBPCAD"),
+  mk("frxGBPCHF","GBP/CHF","GBPCHF"),mk("frxGBPNZD","GBP/NZD","GBPNZD"),
+  mk("frxNZDJPY","NZD/JPY","NZDJPY"),mk("frxNZDUSD","NZD/USD","NZDUSD"),
+  mk("frxUSDMXN","USD/MXN","USDMXN"),mk("frxUSDNOK","USD/NOK","USDNOK"),
+  mk("frxUSDPLN","USD/PLN","USDPLN"),mk("frxUSDSEK","USD/SEK","USDSEK"),
+];
+const AMERICAN_INDICES = [mk("SPC","US 500","US500"),mk("USTECH100","US Tech 100","NAS"),mk("DJI","Wall Street 30","DJ30")];
+const ASIAN_INDICES = [mk("AS51","Australia 200","AUS200"),mk("HSI","Hong Kong 50","HK50"),mk("N225","Japan 225","JPN225")];
+const EUROPEAN_INDICES = [
+  mk("STOXX50E","Europe 50","EU50"),mk("CAC","France 40","FR40"),mk("GER40","Germany 40","GER40"),
+  mk("AEX","Netherlands 25","NL25"),mk("SMI","Swiss 20","CH20"),mk("UK100","UK 100","UK100"),
+];
+const CRYPTOS = [mk("cryBTCUSD","BTC/USD","BTC"),mk("cryETHUSD","ETH/USD","ETH")];
+const METALS = [
+  mk("frxXAUAUD","Gold/AUD","XAUAUD"),mk("frxXAUUSD","Gold/USD","XAUUSD"),
+  mk("frxXPDUSD","Palladium/USD","XPDUSD"),mk("frxXPTUSD","Platinum/USD","XPTUSD"),
 ];
 
-const ALL_MARKETS = ALL_GROUPS.flatMap(g => g.items);
+const MARKET_GROUPS = [
+  { label: "Commodities Basket",  items: COMMODITIES_BASKET,  color: "#F59E0B" },
+  { label: "Forex Basket",        items: FOREX_BASKET,        color: "#22C55E" },
+  { label: "Continuous Indices",  items: CONTINUOUS,          color: "#1E90FF" },
+  { label: "Crash/Boom Indices",  items: CRASH_BOOM,          color: "#EF4444" },
+  { label: "Daily Reset Indices", items: DAILY_RESET,         color: "#6B7280" },
+  { label: "Jump Indices",        items: JUMP,                color: "#F59E0B" },
+  { label: "Range Break Indices", items: RANGE_BREAK,         color: "#7C3AED" },
+  { label: "Step Indices",        items: STEP,                color: "#1A1A1A" },
+  { label: "Major Pairs",         items: MAJOR_PAIRS,         color: "#22C55E" },
+  { label: "Minor Pairs",         items: MINOR_PAIRS,         color: "#22C55E" },
+  { label: "American Indices",    items: AMERICAN_INDICES,    color: "#EF4444" },
+  { label: "Asian Indices",       items: ASIAN_INDICES,       color: "#F59E0B" },
+  { label: "European Indices",    items: EUROPEAN_INDICES,    color: "#1E90FF" },
+  { label: "Cryptocurrencies",    items: CRYPTOS,             color: "#F59E0B" },
+  { label: "Metals",              items: METALS,              color: "#FACC15" },
+];
+
+const ALL_MARKETS = MARKET_GROUPS.flatMap(g => g.items);
 const DEFAULT_MKT = CONTINUOUS.find(m => m.id === "R_100")!;
 
-// ── Price box SVG label ────────────────────────────────────────────────────────
-const PriceBoxLabel = (props: any) => {
+// ── Price pill SVG label ───────────────────────────────────────────────────────
+const PricePill = (props: any) => {
   const { viewBox, displayValue } = props;
   if (!viewBox) return null;
   const { x, y, width } = viewBox;
-  const bx = x + width + 4;
+  const pw = 82, ph = 22, pr = 11;
+  const bx = x + width + 6;
   return (
     <g>
-      <rect x={bx} y={y - 10} width={72} height={20} rx={3} fill="#111827" />
-      <text x={bx + 36} y={y + 5} textAnchor="middle" fill="#fff"
+      <rect x={bx} y={y - ph / 2} width={pw} height={ph} rx={pr} ry={pr} fill="#1A1A1A" />
+      <text x={bx + pw / 2} y={y + 4.5} textAnchor="middle" fill="#fff"
         fontSize={11} fontWeight="bold" fontFamily="monospace">
         {displayValue}
       </text>
@@ -179,11 +123,11 @@ const PriceBoxLabel = (props: any) => {
   );
 };
 
-// ── Markets Modal ──────────────────────────────────────────────────────────────
-function MarketsModal({ selected, onSelect, onClose }: {
+// ── Markets bottom sheet ───────────────────────────────────────────────────────
+function MarketsBottomSheet({ selected, onSelect, onClose }: {
   selected: Market; onSelect: (m: Market) => void; onClose: () => void;
 }) {
-  const [query, setQuery] = useState("");
+  const [query, setQuery]   = useState("");
   const [favIds, setFavIds] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem(FAV_KEY) || "[]"); } catch { return []; }
   });
@@ -198,116 +142,95 @@ function MarketsModal({ selected, onSelect, onClose }: {
     });
   };
 
-  const q = query.trim().toLowerCase();
-  const filtered = q ? ALL_MARKETS.filter(m => m.label.toLowerCase().includes(q) || m.id.toLowerCase().includes(q)) : null;
+  const q          = query.trim().toLowerCase();
+  const filtered   = q ? ALL_MARKETS.filter(m => m.label.toLowerCase().includes(q) || m.id.toLowerCase().includes(q)) : null;
   const favMarkets = ALL_MARKETS.filter(m => favIds.includes(m.id));
 
-  const MarketRow = ({ m }: { m: Market }) => (
+  const MarketRow = ({ m, color }: { m: Market; color?: string }) => (
     <button
       onClick={() => { onSelect(m); onClose(); }}
-      className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors text-left hover:bg-secondary/60 ${
-        m.id === selected.id ? "bg-primary/8 text-primary font-semibold" : "text-foreground"
-      }`}
+      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-[#F4F6FA] transition-colors"
     >
-      <div className="w-9 h-6 rounded bg-secondary flex items-center justify-center text-[9px] font-bold text-foreground border border-border flex-shrink-0 leading-none">
-        {m.badge}
-      </div>
-      <span className="flex-1 truncate">{m.label}</span>
-      {m.id === selected.id && (
-        <span className="w-1.5 h-1.5 rounded-full bg-primary flex-shrink-0 mr-1" />
-      )}
-      <button
-        onClick={e => toggleFav(m.id, e)}
-        className="flex-shrink-0 ml-1 p-0.5"
-      >
+      <button onClick={e => toggleFav(m.id, e)} className="shrink-0">
         <Star className={`w-4 h-4 transition-colors ${
-          favIds.includes(m.id) ? "text-[#FACC15] fill-[#FACC15]" : "text-muted-foreground hover:text-[#FACC15]"
+          favIds.includes(m.id) ? "text-[#1E90FF] fill-[#1E90FF]" : "text-[#D1D5DB] hover:text-[#1E90FF]"
         }`} />
       </button>
+      <div
+        className="w-10 h-7 rounded flex items-center justify-center text-[9px] font-bold text-white shrink-0"
+        style={{ backgroundColor: color || "#1E90FF" }}
+      >
+        {m.badge.length > 4 ? m.badge.slice(0, 4) : m.badge}
+      </div>
+      <span className="flex-1 text-left text-[#1A1A1A] font-medium truncate">{m.label}</span>
+      {m.id === selected.id && <span className="w-2 h-2 rounded-full bg-[#1E90FF] shrink-0" />}
     </button>
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center px-3">
+    <div className="fixed inset-0 z-50 flex items-end">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <div className="relative bg-card border border-border rounded-2xl shadow-2xl flex flex-col w-full max-w-lg h-[88vh] overflow-hidden">
-
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border flex-shrink-0">
-          <h2 className="text-base font-bold text-foreground">Select Market</h2>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
-            <X className="w-5 h-5" />
-          </button>
+      <div className="relative w-full bg-white rounded-t-3xl shadow-2xl flex flex-col" style={{ height: "95vh" }}>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[#E5E7EB] shrink-0">
+          <h2 className="text-base font-bold text-[#1A1A1A]">Markets</h2>
+          <button onClick={onClose} className="p-1 text-[#6B7280] hover:text-[#1A1A1A]"><X className="w-5 h-5" /></button>
         </div>
-
-        {/* Search */}
-        <div className="px-4 py-3 border-b border-border flex-shrink-0">
-          <div className="flex items-center gap-2 bg-background border border-border rounded-lg px-3 py-2">
-            <Search className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+        <div className="px-4 py-3 border-b border-[#E5E7EB] shrink-0">
+          <div className="flex items-center gap-2 bg-[#F4F6FA] border border-[#E5E7EB] rounded-full px-4 py-2.5">
+            <Search className="w-4 h-4 text-[#9CA3AF] shrink-0" />
             <input
-              autoFocus
-              type="text"
-              placeholder="Search markets…"
-              value={query}
-              onChange={e => setQuery(e.target.value)}
-              className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none"
+              autoFocus type="text" placeholder="Search markets…"
+              value={query} onChange={e => setQuery(e.target.value)}
+              className="flex-1 bg-transparent text-sm text-[#1A1A1A] placeholder:text-[#9CA3AF] outline-none"
             />
-            {query && (
-              <button onClick={() => setQuery("")} className="text-muted-foreground hover:text-foreground">
-                <X className="w-4 h-4" />
-              </button>
-            )}
+            {query && <button onClick={() => setQuery("")}><X className="w-4 h-4 text-[#9CA3AF]" /></button>}
           </div>
         </div>
-
-        {/* List */}
         <div className="overflow-y-auto flex-1">
           {filtered ? (
             <>
-              <div className="px-4 py-2 text-xs text-muted-foreground font-medium uppercase tracking-wide border-b border-border/60">
+              <div className="px-4 py-2 text-xs text-[#6B7280] font-semibold uppercase tracking-wide bg-[#F4F6FA] border-b border-[#E5E7EB]">
                 Results ({filtered.length})
               </div>
               {filtered.length === 0
-                ? <p className="text-sm text-muted-foreground text-center py-10">No markets found</p>
-                : filtered.map(m => <MarketRow key={m.id} m={m} />)
+                ? <p className="text-sm text-[#6B7280] text-center py-10">No markets found</p>
+                : filtered.map(m => {
+                    const grp = MARKET_GROUPS.find(g => g.items.some(i => i.id === m.id));
+                    return <MarketRow key={m.id} m={m} color={grp?.color} />;
+                  })
               }
             </>
           ) : (
             <>
-              {/* Favourites */}
-              <div className="border-b border-border">
+              <div className="border-b border-[#E5E7EB]">
                 <button
                   onClick={() => setCollapsed(c => ({ ...c, __favs: !c.__favs }))}
-                  className="w-full flex items-center justify-between px-4 py-2.5 bg-secondary/30 hover:bg-secondary/50 transition-colors"
+                  className="w-full flex items-center justify-between px-4 py-2.5 bg-[#F4F6FA] hover:bg-[#EAECF0]"
                 >
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-[#FACC15] uppercase tracking-wide">
-                    <Star className="w-3.5 h-3.5 fill-[#FACC15]" />
-                    Favourites
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-[#1E90FF] uppercase tracking-wide">
+                    <Star className="w-3.5 h-3.5 fill-[#1E90FF]" /> Favorites
                   </div>
-                  {collapsed.__favs
-                    ? <ChevronRight className="w-4 h-4 text-muted-foreground" />
-                    : <ChevronDown  className="w-4 h-4 text-muted-foreground" />}
+                  {collapsed.__favs ? <ChevronRight className="w-4 h-4 text-[#9CA3AF]" /> : <ChevronDown className="w-4 h-4 text-[#9CA3AF]" />}
                 </button>
                 {!collapsed.__favs && (
                   favMarkets.length === 0
-                    ? <p className="text-sm text-muted-foreground text-center py-4">No favourites yet</p>
-                    : favMarkets.map(m => <MarketRow key={m.id} m={m} />)
+                    ? <p className="text-sm text-[#9CA3AF] text-center py-5 italic">There are no favorites yet.</p>
+                    : favMarkets.map(m => {
+                        const grp = MARKET_GROUPS.find(g => g.items.some(i => i.id === m.id));
+                        return <MarketRow key={m.id} m={m} color={grp?.color} />;
+                      })
                 )}
               </div>
-
-              {/* All groups */}
-              {ALL_GROUPS.map(g => (
-                <div key={g.label} className="border-b border-border/60">
+              {MARKET_GROUPS.map(g => (
+                <div key={g.label} className="border-b border-[#E5E7EB]">
                   <button
                     onClick={() => setCollapsed(c => ({ ...c, [g.label]: !c[g.label] }))}
-                    className="w-full flex items-center justify-between px-4 py-2.5 bg-secondary/30 hover:bg-secondary/50 transition-colors"
+                    className="w-full flex items-center justify-between px-4 py-2.5 bg-[#F4F6FA] hover:bg-[#EAECF0]"
                   >
-                    <span className="text-xs font-bold text-foreground uppercase tracking-wide">{g.label}</span>
-                    {collapsed[g.label]
-                      ? <ChevronRight className="w-4 h-4 text-muted-foreground" />
-                      : <ChevronDown  className="w-4 h-4 text-muted-foreground" />}
+                    <span className="text-xs font-bold text-[#1A1A1A] uppercase tracking-wide">{g.label}</span>
+                    {collapsed[g.label] ? <ChevronRight className="w-4 h-4 text-[#9CA3AF]" /> : <ChevronDown className="w-4 h-4 text-[#9CA3AF]" />}
                   </button>
-                  {!collapsed[g.label] && g.items.map(m => <MarketRow key={m.id} m={m} />)}
+                  {!collapsed[g.label] && g.items.map(m => <MarketRow key={m.id} m={m} color={g.color} />)}
                 </div>
               ))}
             </>
@@ -329,13 +252,12 @@ function fmtTime(epoch: number) {
 
 // ── Main component ─────────────────────────────────────────────────────────────
 export default function Charts() {
-  const [sym, setSym]           = useState<Market>(DEFAULT_MKT);
-  const [showModal, setModal]   = useState(false);
-  const [points, setPoints]     = useState<Point[]>([]);
-  const [price, setPrice]       = useState<number | null>(null);
+  const [sym, setSym]             = useState<Market>(DEFAULT_MKT);
+  const [showModal, setModal]     = useState(false);
+  const [points, setPoints]       = useState<Point[]>([]);
+  const [price, setPrice]         = useState<number | null>(null);
   const [prevPrice, setPrevPrice] = useState<number | null>(null);
-  const [connected, setConnected] = useState(false);
-  const [connStatus, setConnStatus] = useState<"connecting"|"live"|"error">("connecting");
+  const [connStatus, setConnStatus] = useState<"connecting" | "live" | "error">("connecting");
 
   const wsRef       = useRef<WebSocket | null>(null);
   const mountRef    = useRef(true);
@@ -347,9 +269,9 @@ export default function Charts() {
   const allTicksRef = useRef<{ epoch: number; quote: number }[]>([]);
 
   const clearTimers = useCallback(() => {
-    if (retryRef.current) { clearTimeout(retryRef.current);  retryRef.current = null; }
-    if (histRef.current)  { clearTimeout(histRef.current);   histRef.current  = null; }
-    if (pingRef.current)  { clearInterval(pingRef.current);  pingRef.current  = null; }
+    if (retryRef.current) { clearTimeout(retryRef.current); retryRef.current = null; }
+    if (histRef.current)  { clearTimeout(histRef.current);  histRef.current  = null; }
+    if (pingRef.current)  { clearInterval(pingRef.current); pingRef.current  = null; }
   }, []);
 
   const buildPoints = (ticks: { epoch: number; quote: number }[]) =>
@@ -368,12 +290,8 @@ export default function Charts() {
     ws.onopen = () => {
       if (!mountRef.current) return;
       ws.send(JSON.stringify({
-        ticks_history: symRef.current,
-        count: 100,
-        end: "latest",
-        start: 1,
-        style: "ticks",
-        subscribe: 1,
+        ticks_history: symRef.current, count: 100, end: "latest",
+        start: 1, style: "ticks", subscribe: 1,
       }));
       histRef.current = setTimeout(() => {
         if (!mountRef.current) return;
@@ -406,12 +324,9 @@ export default function Charts() {
           if (prices.length > 0) {
             const last = prices[prices.length - 1];
             const prev = prices.length > 1 ? prices[prices.length - 2] : last;
-            setPrice(last);
-            setPrevPrice(prev);
+            setPrice(last); setPrevPrice(prev);
           }
-          setConnected(true);
           setConnStatus("live");
-          // store subscription id if provided
           if (msg.subscription?.id) subIdRef.current = msg.subscription.id;
         }
 
@@ -424,38 +339,31 @@ export default function Charts() {
           if (next.length > MAX_TICKS * 2) next.shift();
           allTicksRef.current = next;
           setPoints(buildPoints(next));
-          setConnected(true);
           setConnStatus("live");
         }
       } catch (_) {}
     };
 
-    ws.onerror = () => { if (mountRef.current) { setConnected(false); setConnStatus("error"); } };
+    ws.onerror = () => { if (mountRef.current) setConnStatus("error"); };
     ws.onclose = () => {
       if (!mountRef.current) return;
-      clearTimers(); setConnected(false); setConnStatus("error");
+      clearTimers(); setConnStatus("error");
       retryRef.current = setTimeout(connect, RETRY_DELAY);
     };
   }, [clearTimers]);
 
-  // When symbol changes: forget old subscription, then reconnect
   useEffect(() => {
     mountRef.current = true;
-    const prevSymId = symRef.current;
-    symRef.current  = sym.id;
+    const prevId = symRef.current;
+    symRef.current = sym.id;
 
-    // If WS is open and we have a sub id, forget it before re-subscribing
-    if (
-      wsRef.current?.readyState === WebSocket.OPEN &&
-      subIdRef.current &&
-      prevSymId !== sym.id
-    ) {
+    if (wsRef.current?.readyState === WebSocket.OPEN && subIdRef.current && prevId !== sym.id) {
       wsRef.current.send(JSON.stringify({ forget: subIdRef.current }));
     }
 
     allTicksRef.current = [];
     setPoints([]); setPrice(null); setPrevPrice(null);
-    setConnected(false); setConnStatus("connecting");
+    setConnStatus("connecting");
     connect();
 
     return () => {
@@ -468,143 +376,137 @@ export default function Charts() {
   // ── Derived ────────────────────────────────────────────────────────────────
   const priceChange = price != null && prevPrice != null ? price - prevPrice : null;
   const priceUp     = priceChange == null ? null : priceChange >= 0;
+  const dp          = price != null ? (price > 100 ? 2 : price > 10 ? 4 : 5) : 2;
 
   const values = points.map(p => p.value);
   const minV   = values.length ? Math.min(...values) : 0;
   const maxV   = values.length ? Math.max(...values) : 0;
   const pad    = ((maxV - minV) * 0.25) || 1;
 
-  const dp = price != null
-    ? price > 1000 ? 2 : price > 10 ? 4 : 5
-    : 2;
-
   const connDot =
-    connStatus === "live"       ? "bg-[#22C55E]" :
-    connStatus === "error"      ? "bg-[#EF4444] animate-pulse" :
-                                  "bg-[#FACC15] animate-pulse";
+    connStatus === "live"  ? "bg-[#22C55E]" :
+    connStatus === "error" ? "bg-[#EF4444] animate-pulse" :
+                             "bg-[#F59E0B] animate-pulse";
+
+  // Tick x-axis: show every Nth label for readability
+  const tickCount = points.length;
+  const xInterval = tickCount <= 20 ? 0 : tickCount <= 50 ? 4 : tickCount <= 100 ? 9 : 19;
 
   return (
-    <div className="flex flex-col min-h-[calc(100vh-80px)] bg-background pb-4">
+    <div className="flex flex-col h-[calc(100vh-80px)] bg-[#F4F6FA]">
 
-      {/* Market modal */}
       {showModal && (
-        <MarketsModal
+        <MarketsBottomSheet
           selected={sym}
           onSelect={setSym}
           onClose={() => setModal(false)}
         />
       )}
 
-      {/* ── Top bar ─────────────────────────────────────────────────────────── */}
-      <div className="flex items-center gap-3 px-4 pt-4 pb-3 flex-wrap gap-y-2">
-
-        {/* Market selector card */}
-        <button
-          onClick={() => setModal(true)}
-          className="flex items-center gap-2.5 bg-card border border-border rounded-xl px-3.5 py-2.5 hover:border-primary/60 transition-colors shadow-sm"
-        >
-          <div className="flex items-center gap-1.5">
-            <span className={`w-2 h-2 rounded-full ${connDot}`} />
-            <div className="w-9 h-8 rounded-lg bg-secondary flex items-center justify-center text-[10px] font-bold text-foreground border border-border">
-              {sym.badge}
-            </div>
-            <CandlestickChart className="w-4 h-4 text-muted-foreground" />
-          </div>
-          <div className="text-left min-w-0">
-            <div className="text-sm font-bold text-foreground leading-tight truncate max-w-[200px]">
-              {sym.label}
-            </div>
-            {price != null ? (
-              <div className={`text-xs font-mono flex items-center gap-1 mt-0.5 ${priceUp === false ? "text-[#EF4444]" : "text-[#22C55E]"}`}>
-                <span>{priceUp ? "▲" : "▼"}</span>
-                <span className="font-bold">{price.toFixed(dp)}</span>
-                {priceChange != null && prevPrice != null && (
-                  <span>
-                    {priceChange >= 0 ? "+" : ""}{priceChange.toFixed(dp)}
-                    {" "}({Math.abs(priceChange / prevPrice * 100).toFixed(2)}%)
-                  </span>
-                )}
-              </div>
-            ) : (
-              <div className="text-xs text-muted-foreground mt-0.5">Connecting…</div>
-            )}
-          </div>
-          <ChevronDown className="w-4 h-4 text-muted-foreground ml-0.5 flex-shrink-0" />
-        </button>
-      </div>
-
-      {/* ── Chart ────────────────────────────────────────────────────────────── */}
-      <div className="px-4 flex-1">
-        <div className="relative bg-card border border-border rounded-xl overflow-hidden shadow-sm" style={{ height: "calc(100vh - 220px)", minHeight: 320 }}>
-          {points.length < 2 ? (
-            <div className="flex items-center justify-center h-full text-muted-foreground text-sm gap-2">
-              <div className={`w-4 h-4 border-2 rounded-full animate-spin ${
-                connStatus === "error"
-                  ? "border-[#EF4444]/30 border-t-[#EF4444]"
-                  : "border-primary/30 border-t-primary"
-              }`} />
-              {connStatus === "error" ? "Reconnecting…" : "Connecting to live feed…"}
+      {/* ── Market selector card ─────────────────────────────────────────────── */}
+      <button
+        onClick={() => setModal(true)}
+        className="mx-3 mt-3 bg-white border border-[#E5E7EB] rounded-2xl shadow-sm p-4 flex items-center gap-3 active:scale-[0.99] transition-transform shrink-0"
+      >
+        <div className="w-12 h-12 rounded-xl bg-[#1E90FF]/10 flex items-center justify-center shrink-0">
+          <CandlestickChart className="w-6 h-6 text-[#1E90FF]" />
+        </div>
+        <div className="flex-1 text-left min-w-0">
+          <div className="text-base font-bold text-[#1A1A1A] truncate">{sym.label}</div>
+          {price != null ? (
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <span className={`text-sm font-mono font-bold ${priceUp === false ? "text-[#EF4444]" : "text-[#22C55E]"}`}>
+                {price.toFixed(dp)}
+              </span>
+              {priceChange != null && prevPrice != null && (
+                <span className={`text-xs ${priceUp === false ? "text-[#EF4444]" : "text-[#22C55E]"}`}>
+                  {priceChange >= 0 ? "+" : ""}{priceChange.toFixed(dp)}
+                  {" "}({Math.abs(priceChange / prevPrice * 100).toFixed(2)}%)
+                  {" "}{priceUp === false ? "▼" : "▲"}
+                </span>
+              )}
             </div>
           ) : (
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart
-                data={points}
-                margin={{ top: 24, right: 86, left: 4, bottom: 32 }}
-              >
-                <defs>
-                  <linearGradient id="chartFill" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%"   stopColor="#9CA3AF" stopOpacity={0.35} />
-                    <stop offset="100%" stopColor="#9CA3AF" stopOpacity={0.03} />
-                  </linearGradient>
-                </defs>
-
-                <XAxis
-                  dataKey="time"
-                  tick={{ fontSize: 9, fill: "#9CA3AF", fontFamily: "monospace" }}
-                  tickLine={false}
-                  axisLine={{ stroke: "#E5E7EB", strokeWidth: 1 }}
-                  interval="preserveStartEnd"
-                  minTickGap={60}
-                />
-                <YAxis
-                  domain={[minV - pad, maxV + pad]}
-                  tick={{ fontSize: 9, fill: "#9CA3AF", fontFamily: "monospace" }}
-                  axisLine={false}
-                  tickLine={false}
-                  width={62}
-                  tickFormatter={(v: number) => v.toFixed(dp)}
-                />
-
-                {/* Dotted current price line + right-edge label box */}
-                {price != null && (
-                  <ReferenceLine
-                    y={price}
-                    stroke="#374151"
-                    strokeDasharray="5 3"
-                    strokeWidth={1.5}
-                    label={<PriceBoxLabel displayValue={price.toFixed(dp)} />}
-                  />
-                )}
-
-                <Area
-                  type="linear"
-                  dataKey="value"
-                  stroke="#6B7280"
-                  strokeWidth={1.5}
-                  fill="url(#chartFill)"
-                  dot={false}
-                  isAnimationActive={false}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
+            <div className="text-xs text-[#9CA3AF] mt-0.5 flex items-center gap-1">
+              <span className={`w-1.5 h-1.5 rounded-full ${connDot}`} />
+              Connecting…
+            </div>
           )}
-
-          {/* Bottom-left overlay: 1T + candlestick icon */}
-          <div className="absolute bottom-6 left-6 flex items-center gap-1.5 bg-card/80 border border-border rounded-md px-2 py-1 text-xs font-mono text-muted-foreground">
-            <span className="font-bold text-foreground">1T</span>
-            <CandlestickChart className="w-3.5 h-3.5" />
-          </div>
         </div>
+        <ChevronDown className="w-5 h-5 text-[#6B7280] shrink-0" />
+      </button>
+
+      {/* ── Chart ─────────────────────────────────────────────────────────────── */}
+      <div
+        className="mx-3 mt-2 mb-2 bg-white border border-[#E5E7EB] rounded-2xl shadow-sm overflow-hidden relative flex-1"
+        style={{ minHeight: 280 }}
+      >
+        {/* 1T label bottom-left */}
+        <div className="absolute bottom-3 left-3 z-10 flex items-center gap-1 text-[#9CA3AF] pointer-events-none">
+          <CandlestickChart className="w-3 h-3" />
+          <span className="text-[11px] font-semibold">1 T</span>
+        </div>
+
+        {/* Live dot top-right */}
+        <div className="absolute top-3 right-3 z-10 flex items-center gap-1.5">
+          <span className={`w-2 h-2 rounded-full ${connDot}`} />
+          {connStatus === "live" && (
+            <span className="text-[10px] text-[#22C55E] font-semibold">LIVE</span>
+          )}
+        </div>
+
+        {points.length < 2 ? (
+          <div className="flex items-center justify-center h-full text-[#9CA3AF] text-sm gap-2">
+            <div className={`w-4 h-4 border-2 rounded-full animate-spin ${
+              connStatus === "error"
+                ? "border-[#EF4444]/30 border-t-[#EF4444]"
+                : "border-[#1E90FF]/30 border-t-[#1E90FF]"
+            }`} />
+            {connStatus === "error" ? "Reconnecting…" : "Connecting to live feed…"}
+          </div>
+        ) : (
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart
+              data={points}
+              margin={{ top: 12, right: 96, left: 0, bottom: 20 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" vertical={false} />
+              <XAxis
+                dataKey="time"
+                tick={{ fontSize: 10, fill: "#9CA3AF" }}
+                axisLine={false}
+                tickLine={false}
+                interval={xInterval}
+              />
+              <YAxis
+                orientation="right"
+                domain={[minV - pad, maxV + pad]}
+                tick={{ fontSize: 10, fill: "#9CA3AF" }}
+                axisLine={false}
+                tickLine={false}
+                width={68}
+                tickFormatter={(v: number) => v.toFixed(dp)}
+              />
+              {price != null && (
+                <ReferenceLine
+                  y={price}
+                  stroke="#1A1A1A"
+                  strokeDasharray="5 3"
+                  strokeWidth={1}
+                  label={<PricePill displayValue={price.toFixed(dp)} />}
+                />
+              )}
+              <Line
+                type="linear"
+                dataKey="value"
+                stroke="#1A1A1A"
+                strokeWidth={1.5}
+                dot={false}
+                isAnimationActive={false}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        )}
       </div>
     </div>
   );

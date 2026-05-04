@@ -23,11 +23,11 @@ function useClock() {
 }
 
 export default function BottomBar() {
-  const [expanded, setExpanded]           = useState(false);
-  const [activeTab, setActiveTab]         = useState("Summary");
+  const [expanded, setExpanded]             = useState(false);
+  const [activeTab, setActiveTab]           = useState("Summary");
   const [showDisclaimer, setShowDisclaimer] = useState(false);
-  const [statusMsg, setStatusMsg]         = useState("Bot is not running");
-  const [noBot, setNoBot]                 = useState(false);
+  const [statusMsg, setStatusMsg]           = useState("Bot is not running");
+  const [noBot, setNoBot]                   = useState(false);
 
   const tradeWsRef = useRef<WebSocket | null>(null);
   const { isLoggedIn } = useAuth();
@@ -155,20 +155,20 @@ export default function BottomBar() {
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4"
           onClick={e => { if (e.target === e.currentTarget) setShowDisclaimer(false); }}
         >
-          <div className="bg-card border border-border rounded-xl shadow-2xl w-full max-w-sm p-6 relative">
+          <div className="bg-white border border-[#E5E7EB] rounded-xl shadow-2xl w-full max-w-sm p-6 relative">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold text-foreground">Risk Disclaimer</h2>
-              <button onClick={() => setShowDisclaimer(false)} className="p-1 text-muted-foreground hover:text-foreground rounded">
+              <h2 className="text-lg font-bold text-[#1A1A1A]">Risk Disclaimer</h2>
+              <button onClick={() => setShowDisclaimer(false)} className="p-1 text-[#6B7280] hover:text-[#1A1A1A] rounded">
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <p className="text-sm text-foreground leading-relaxed mb-6">
+            <p className="text-sm text-[#1A1A1A] leading-relaxed mb-6">
               <span className="font-bold">Important Risk Warning</span>{" "}
               Deriv offers complex derivatives, such as options and contracts for difference ("CFDs"). These products may not be suitable for all clients, and trading them puts you at risk. You may lose some or all of the money you invest. Never trade with borrowed money or money you cannot afford to lose.
             </p>
             <button
               onClick={() => setShowDisclaimer(false)}
-              className="w-full py-2.5 bg-[#FACC15] hover:bg-[#eab308] text-black font-bold rounded-lg text-sm"
+              className="w-full py-2.5 bg-[#1E90FF] hover:bg-[#1a7fe0] text-white font-bold rounded-lg text-sm"
             >
               I Understand
             </button>
@@ -185,16 +185,16 @@ export default function BottomBar() {
 
       {/* Expanded Panel */}
       {expanded && (
-        <div className="fixed bottom-[52px] left-0 right-0 z-40 bg-background border-t border-border shadow-[0_-10px_40px_rgba(0,0,0,0.10)]">
-          <div className="flex items-center gap-6 px-6 border-b border-border bg-card">
+        <div className="fixed bottom-[52px] left-0 right-0 z-40 bg-[#F4F6FA] border-t border-[#E5E7EB] shadow-[0_-10px_40px_rgba(0,0,0,0.10)]">
+          <div className="flex items-center gap-6 px-6 border-b border-[#E5E7EB] bg-white">
             {["Summary", "Transactions", "Journal"].map(tab => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
                 className={`py-3 text-sm font-medium border-b-2 transition-colors ${
                   activeTab === tab
-                    ? "border-primary text-primary"
-                    : "border-transparent text-muted-foreground hover:text-foreground"
+                    ? "border-[#1E90FF] text-[#1E90FF]"
+                    : "border-transparent text-[#6B7280] hover:text-[#1A1A1A]"
                 }`}
               >
                 {tab}
@@ -203,7 +203,7 @@ export default function BottomBar() {
             <div className="flex-1" />
             <button
               onClick={reset}
-              className="text-xs text-muted-foreground hover:text-foreground border border-border px-3 py-1 rounded hover:bg-secondary"
+              className="text-xs text-[#6B7280] hover:text-[#1A1A1A] border border-[#E5E7EB] px-3 py-1 rounded hover:bg-[#F4F6FA]"
             >
               Reset
             </button>
@@ -225,12 +225,12 @@ export default function BottomBar() {
                     positive: totalProfit >= 0,
                   },
                 ].map(stat => (
-                  <div key={stat.label} className="bg-card border border-border rounded-lg p-4 shadow-sm">
-                    <div className="text-xs text-muted-foreground mb-1">{stat.label}</div>
+                  <div key={stat.label} className="bg-white border border-[#E5E7EB] rounded-lg p-4 shadow-sm">
+                    <div className="text-xs text-[#6B7280] mb-1">{stat.label}</div>
                     <div className={`text-lg font-bold ${
                       stat.highlight
                         ? stat.positive ? "text-[#22C55E]" : "text-[#EF4444]"
-                        : "text-foreground"
+                        : "text-[#1A1A1A]"
                     }`}>
                       {stat.val}
                     </div>
@@ -241,19 +241,19 @@ export default function BottomBar() {
 
             {activeTab === "Transactions" && (
               results.length === 0 ? (
-                <div className="h-24 flex items-center justify-center text-muted-foreground text-sm">
+                <div className="h-24 flex items-center justify-center text-[#6B7280] text-sm">
                   No transactions yet.
                 </div>
               ) : (
                 <div className="overflow-auto max-h-48 space-y-2">
                   {results.map(r => (
-                    <div key={r.id} className="flex items-center justify-between bg-card border border-border rounded-lg px-4 py-2 text-sm">
-                      <span className="text-muted-foreground font-mono text-xs">#{r.id}</span>
-                      <span className="text-foreground">Stake: {r.buyPrice.toFixed(2)}</span>
+                    <div key={r.id} className="flex items-center justify-between bg-white border border-[#E5E7EB] rounded-lg px-4 py-2 text-sm">
+                      <span className="text-[#6B7280] font-mono text-xs">#{r.id}</span>
+                      <span className="text-[#1A1A1A]">Stake: {r.buyPrice.toFixed(2)}</span>
                       <span className={`font-semibold px-2 py-0.5 rounded text-xs ${
                         r.status === "won" ? "bg-[#22C55E]/10 text-[#22C55E]" :
                         r.status === "lost" ? "bg-[#EF4444]/10 text-[#EF4444]" :
-                        "bg-primary/10 text-primary"
+                        "bg-[#1E90FF]/10 text-[#1E90FF]"
                       }`}>
                         {r.status === "open" ? "Open" : r.status === "won" ? `+${r.profit?.toFixed(2)}` : r.profit?.toFixed(2)}
                       </span>
@@ -264,7 +264,7 @@ export default function BottomBar() {
             )}
 
             {activeTab === "Journal" && (
-              <div className="h-24 flex items-center justify-center text-muted-foreground text-sm">
+              <div className="h-24 flex items-center justify-center text-[#6B7280] text-sm">
                 No journal entries yet.
               </div>
             )}
@@ -273,15 +273,15 @@ export default function BottomBar() {
       )}
 
       {/* Main Bar */}
-      <div className="h-[52px] bg-card border-t border-border fixed bottom-0 left-0 right-0 z-40 flex items-center px-4 gap-3 shadow-sm">
+      <div className="h-[52px] bg-white border-t border-[#E5E7EB] fixed bottom-0 left-0 right-0 z-40 flex items-center px-4 gap-3 shadow-sm">
         <button
           onClick={() => setShowDisclaimer(true)}
-          className="text-[#FACC15] border border-[#FACC15] px-3 py-1.5 rounded text-xs font-semibold hover:bg-[#FACC15]/10 transition-colors whitespace-nowrap shrink-0"
+          className="text-[#1E90FF] border border-[#1E90FF] px-3 py-1.5 rounded text-xs font-semibold hover:bg-[#1E90FF]/10 transition-colors whitespace-nowrap shrink-0"
         >
           Risk Disclaimer
         </button>
 
-        <div className="w-[1px] h-6 bg-border shrink-0" />
+        <div className="w-[1px] h-6 bg-[#E5E7EB] shrink-0" />
 
         {isRunning ? (
           <button
@@ -294,33 +294,32 @@ export default function BottomBar() {
         ) : (
           <button
             onClick={runBot}
-            className="bg-[#22C55E] hover:bg-[#16a34a] text-white w-8 h-8 rounded flex items-center justify-center shrink-0 transition-colors"
+            className="bg-[#1E90FF] hover:bg-[#1a7fe0] text-white w-8 h-8 rounded flex items-center justify-center shrink-0 transition-colors"
             aria-label="Run bot"
           >
             <Play className="w-4 h-4 fill-current ml-0.5" />
           </button>
         )}
 
-        <span className={`text-xs whitespace-nowrap shrink-0 ${isRunning ? "text-[#22C55E] animate-pulse" : "text-muted-foreground"}`}>
+        <span className={`text-xs whitespace-nowrap shrink-0 ${isRunning ? "text-[#1E90FF] animate-pulse" : "text-[#6B7280]"}`}>
           {statusMsg}
         </span>
 
         {isRunning && (
           <div className="hidden md:flex items-center flex-1 px-2 h-full min-w-0">
-            <div className="w-full h-1 bg-border rounded-full overflow-hidden">
-              <div className="h-full bg-[#22C55E] rounded-full animate-pulse w-1/3" />
+            <div className="w-full h-1 bg-[#E5E7EB] rounded-full overflow-hidden">
+              <div className="h-full bg-[#1E90FF] rounded-full animate-pulse w-1/3" />
             </div>
           </div>
         )}
 
-        {/* Live timestamp */}
-        <span className="hidden md:block text-[11px] text-muted-foreground font-mono ml-auto shrink-0 select-none">
+        <span className="hidden md:block text-[11px] text-[#6B7280] font-mono ml-auto shrink-0 select-none">
           {clock}
         </span>
 
         <button
           onClick={() => setExpanded(!expanded)}
-          className="p-2 text-muted-foreground hover:text-foreground hover:bg-secondary rounded transition-colors shrink-0"
+          className="p-2 text-[#6B7280] hover:text-[#1A1A1A] hover:bg-[#F4F6FA] rounded transition-colors shrink-0"
         >
           {expanded ? <ChevronDown className="w-5 h-5" /> : <ChevronUp className="w-5 h-5" />}
         </button>
