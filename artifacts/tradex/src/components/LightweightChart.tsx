@@ -49,6 +49,7 @@ export default function LightweightChart({ symbol, tradingMode = false, onPriceU
         textColor:  AXIS_TEXT,
         fontSize:   11,
         fontFamily: "'IBM Plex Sans','Inter',system-ui,sans-serif",
+        attributionLogo: false,
       },
       grid: {
         vertLines: { color: GRID, style: LineStyle.Solid },

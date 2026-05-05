@@ -1,861 +1,845 @@
 import {
-  useState, useEffect, useRef, useCallback,
+  useState, useEffect, useRef, useCallback, useMemo,
 } from "react";
 import {
-  ChevronDown, TrendingUp, TrendingDown,
+  ChevronDown, TrendingUp, Minus, Plus,
   Check, AlertCircle, Loader2, X,
-  ToggleLeft, ToggleRight,
 } from "lucide-react";
 import LightweightChart from "@/components/LightweightChart";
-import AuthGateModal   from "@/components/AuthGateModal";
+import AuthGateModal    from "@/components/AuthGateModal";
 import { useAuth, DERIV_APP_ID } from "@/context/AuthContext";
 
-/* ──────────────────────────────── constants ── */
+/* ─────────────────────────── constants ── */
 
 const WS_URL = `wss://ws.binaryws.com/websockets/v3?app_id=${DERIV_APP_ID}`;
 
 const MARKETS = [
-  { label: "Volatility 100 (1s)",  id: "1HZ100V"   },
-  { label: "Volatility 100",       id: "R_100"      },
-  { label: "Volatility 75 (1s)",   id: "1HZ75V"     },
-  { label: "Volatility 75",        id: "R_75"       },
-  { label: "Volatility 50 (1s)",   id: "1HZ50V"     },
-  { label: "Volatility 50",        id: "R_50"       },
-  { label: "Volatility 25 (1s)",   id: "1HZ25V"     },
-  { label: "Volatility 25",        id: "R_25"       },
-  { label: "Volatility 10 (1s)",   id: "1HZ10V"     },
-  { label: "Volatility 10",        id: "R_10"       },
-  { label: "Boom 1000",            id: "BOOM1000N"  },
-  { label: "Boom 500",             id: "BOOM500N"   },
-  { label: "Boom 300",             id: "BOOM300N"   },
-  { label: "Crash 1000",           id: "CRASH1000N" },
-  { label: "Crash 500",            id: "CRASH500N"  },
-  { label: "Crash 300",            id: "CRASH300N"  },
-  { label: "Step Index",           id: "stpRNG100"  },
-  { label: "Jump 10",              id: "JD10"       },
-  { label: "Jump 25",              id: "JD25"       },
-  { label: "Jump 50",              id: "JD50"       },
-  { label: "Jump 75",              id: "JD75"       },
-  { label: "Jump 100",             id: "JD100"      },
+  { label: "Volatility 100 (1s)", id: "1HZ100V"    },
+  { label: "Volatility 100",      id: "R_100"       },
+  { label: "Volatility 75 (1s)",  id: "1HZ75V"      },
+  { label: "Volatility 75",       id: "R_75"        },
+  { label: "Volatility 50 (1s)",  id: "1HZ50V"      },
+  { label: "Volatility 50",       id: "R_50"        },
+  { label: "Volatility 25 (1s)",  id: "1HZ25V"      },
+  { label: "Volatility 25",       id: "R_25"        },
+  { label: "Volatility 10 (1s)",  id: "1HZ10V"      },
+  { label: "Volatility 10",       id: "R_10"        },
+  { label: "Boom 1000",           id: "BOOM1000N"   },
+  { label: "Boom 500",            id: "BOOM500N"    },
+  { label: "Crash 1000",          id: "CRASH1000N"  },
+  { label: "Crash 500",           id: "CRASH500N"   },
+  { label: "Step Index",          id: "stpRNG100"   },
+  { label: "Jump 100",            id: "JD100"       },
+  { label: "Jump 75",             id: "JD75"        },
+  { label: "Jump 50",             id: "JD50"        },
 ];
 
-/* Duration units DTrader supports */
-const DUR_UNITS = [
-  { label: "Ticks",   value: "t" },
-  { label: "Seconds", value: "s" },
-  { label: "Minutes", value: "m" },
-  { label: "Hours",   value: "h" },
-  { label: "Days",    value: "d" },
-];
+type ContractType = "accumulators" | "rise_fall" | "multipliers";
 
-const ACC_GROWTH  = ["1%", "2%", "3%", "4%", "5%"];
-const MUL_VALUES  = ["10×", "20×", "30×", "50×", "100×"];
-const DIGIT_TYPES = ["Matches", "Differs", "Over", "Under", "Even", "Odd"];
-
-type Tab = "rise_fall" | "accumulators" | "multipliers" | "digits";
-
-/* ──────────────────────────────── colours ── */
-const C = {
-  bg:      "#0f172a",
-  panel:   "#0d1b2a",        /* slightly blue-dark — DTrader bottom panel tint */
-  field:   "#1a2744",        /* field backgrounds */
-  border:  "#243554",
-  border2: "#1e3a5f",
-  text:    "#f1f5f9",
-  sub:     "#8899b4",
-  rise:    "#008877",        /* DTrader teal-green */
-  fall:    "#cc2e3d",        /* DTrader red */
-  blue:    "#4b7fe8",
-  accent:  "#4bb4b3",
+const CONTRACT_LABELS: Record<ContractType, string> = {
+  accumulators: "Accumulators",
+  rise_fall:    "Rise / Fall",
+  multipliers:  "Multipliers",
 };
 
-/* ──────────────────────────────── live-price hook ── */
+const GROWTH_RATES = [1, 2, 3, 4, 5];
+
+/* ─────────────────────────── colours (TradeX theme) ── */
+const C = {
+  bg:      "#0f172a",
+  panel:   "#0b1628",
+  row:     "#111f36",
+  field:   "#162240",
+  border:  "#1e3357",
+  text:    "#f0f4ff",
+  sub:     "#7b93b8",
+  accent:  "#3b82f6",
+  green:   "#00c076",   /* vivid green for buy button */
+  rise:    "#00b896",
+  fall:    "#e53935",
+  chip:    "#1a2d4a",
+  chipSel: "#2563eb",
+};
+
+/* ─────────────────────────── live-price hook ── */
 
 function useLivePrice(symbol: string) {
   const [price, setPrice] = useState<number | null>(null);
-  const [prev,  setPrev]  = useState<number | null>(null);
-  const wsRef    = useRef<WebSocket | null>(null);
-  const prevRef  = useRef<number | null>(null);
-  const mountRef = useRef(true);
+  const [dir,   setDir]   = useState<"up"|"dn"|null>(null);
+  const prev    = useRef<number | null>(null);
+  const ws      = useRef<WebSocket | null>(null);
+  const alive   = useRef(true);
 
   useEffect(() => {
-    mountRef.current = true;
-    setPrice(null); setPrev(null); prevRef.current = null;
-    const ws = new WebSocket(WS_URL);
-    wsRef.current = ws;
-    ws.onopen = () => {
-      if (!mountRef.current) return;
-      ws.send(JSON.stringify({ ticks: symbol, subscribe: 1 }));
+    alive.current = true;
+    setPrice(null); setDir(null); prev.current = null;
+    const sock = new WebSocket(WS_URL);
+    ws.current = sock;
+    sock.onopen = () => {
+      if (!alive.current) return;
+      sock.send(JSON.stringify({ ticks: symbol, subscribe: 1 }));
     };
-    ws.onmessage = (e) => {
-      if (!mountRef.current) return;
+    sock.onmessage = (e) => {
+      if (!alive.current) return;
       try {
-        const msg = JSON.parse(e.data as string);
-        if (msg.msg_type === "tick") {
-          const q: number = msg.tick.quote;
-          setPrev(prevRef.current);
-          prevRef.current = q;
+        const m = JSON.parse(e.data as string);
+        if (m.msg_type === "tick") {
+          const q: number = m.tick.quote;
+          setDir(prev.current == null ? null : q >= prev.current ? "up" : "dn");
+          prev.current = q;
           setPrice(q);
         }
       } catch {}
     };
-    ws.onerror = ws.onclose = () => {};
+    sock.onerror = sock.onclose = () => {};
     return () => {
-      mountRef.current = false;
-      ws.onclose = null; ws.close();
+      alive.current = false;
+      sock.onclose = null;
+      sock.close();
     };
   }, [symbol]);
 
-  const dir = prev == null || price == null ? null : price >= prev ? "up" : "dn";
   return { price, dir };
 }
 
-/* ──────────────────────────────── proposal / buy ── */
+/* ─────────────────────────── proposal hook ── */
 
-interface Proposal {
-  id: string; payout: number; ask: number;
-}
+interface Proposal { id: string; payout: number; ask: number; }
 
-function useTrade() {
+function useProposal() {
   const { activeAccount } = useAuth();
-  const [proposal, setProposal] = useState<Proposal | null>(null);
-  const [loading,  setLoading]  = useState(false);
-  const [result,   setResult]   = useState<{ ok: boolean; msg: string } | null>(null);
-  const wsRef    = useRef<WebSocket | null>(null);
-  const reqRef   = useRef(1);
-  const mountRef = useRef(true);
+  const [data,    setData]    = useState<Proposal | null>(null);
+  const [buying,  setBuying]  = useState(false);
+  const [result,  setResult]  = useState<{ ok: boolean; msg: string } | null>(null);
+  const ws    = useRef<WebSocket | null>(null);
+  const seq   = useRef(1);
+  const alive = useRef(true);
 
-  const fetchProposal = useCallback((
-    symbol: string, contractType: "CALL"|"PUT",
-    duration: number, durationUnit: string, stake: string,
+  const fetch = useCallback((
+    symbol: string, ctype: ContractType,
+    stake: string, growth: number,
   ) => {
     if (!activeAccount) return;
-    setProposal(null);
-    wsRef.current?.close();
-    const ws = new WebSocket(WS_URL);
-    wsRef.current = ws;
-    ws.onopen = () => ws.send(JSON.stringify({ authorize: activeAccount.token }));
-    ws.onmessage = (e) => {
-      if (!mountRef.current) return;
+    setData(null);
+    ws.current?.close();
+    const sock = new WebSocket(WS_URL);
+    ws.current = sock;
+    sock.onopen = () => sock.send(JSON.stringify({ authorize: activeAccount.token }));
+    sock.onmessage = (e) => {
+      if (!alive.current) return;
       try {
-        const msg = JSON.parse(e.data as string);
-        if (msg.error) return;
-        if (msg.msg_type === "authorize") {
-          ws.send(JSON.stringify({
+        const m = JSON.parse(e.data as string);
+        if (m.error) return;
+        if (m.msg_type === "authorize") {
+          const base = {
             proposal: 1, subscribe: 1,
             amount: parseFloat(stake) || 1, basis: "stake",
-            contract_type: contractType,
             currency: activeAccount.currency || "USD",
-            duration, duration_unit: durationUnit, symbol,
-            req_id: ++reqRef.current,
-          }));
+            symbol,
+            req_id: ++seq.current,
+          };
+          if (ctype === "accumulators") {
+            sock.send(JSON.stringify({ ...base, contract_type: "ACCU", growth_rate: growth / 100 }));
+          } else if (ctype === "rise_fall") {
+            sock.send(JSON.stringify({ ...base, contract_type: "CALL", duration: 5, duration_unit: "t" }));
+          } else {
+            sock.send(JSON.stringify({ ...base, contract_type: "MULTUP", multiplier: 10, duration: 0, duration_unit: "d" }));
+          }
         }
-        if (msg.msg_type === "proposal" && msg.proposal) {
-          const p = msg.proposal;
-          setProposal({ id: p.id, payout: p.payout, ask: p.ask_price });
+        if (m.msg_type === "proposal" && m.proposal) {
+          const p = m.proposal;
+          setData({ id: p.id, payout: p.payout ?? p.ask_price * 1.95, ask: p.ask_price });
         }
       } catch {}
     };
-    ws.onerror = ws.onclose = () => {};
+    sock.onerror = sock.onclose = () => {};
   }, [activeAccount]);
 
   const buy = useCallback((proposalId: string) => {
-    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
-    setLoading(true); setResult(null);
-    wsRef.current.send(JSON.stringify({ buy: proposalId, price: 999999, req_id: ++reqRef.current }));
-    wsRef.current.onmessage = (e) => {
-      if (!mountRef.current) return;
+    if (!ws.current || ws.current.readyState !== WebSocket.OPEN) return;
+    setBuying(true); setResult(null);
+    ws.current.send(JSON.stringify({ buy: proposalId, price: 999999, req_id: ++seq.current }));
+    const prev = ws.current.onmessage;
+    ws.current.onmessage = (e) => {
+      if (!alive.current) return;
       try {
-        const msg = JSON.parse(e.data as string);
-        if (msg.msg_type === "buy") {
-          setResult(msg.error
-            ? { ok: false, msg: msg.error.message }
-            : { ok: true,  msg: `Placed! Contract #${msg.buy?.contract_id ?? ""}` });
+        const m = JSON.parse(e.data as string);
+        if (m.msg_type === "buy") {
+          setResult(m.error
+            ? { ok: false, msg: m.error.message }
+            : { ok: true,  msg: `Placed! #${m.buy?.contract_id ?? ""}` });
+          setBuying(false);
         }
       } catch {}
-      setLoading(false);
     };
+    void prev;
   }, []);
 
-  const clearResult = useCallback(() => setResult(null), []);
+  const clear = useCallback(() => setResult(null), []);
+
   useEffect(() => {
-    mountRef.current = true;
-    return () => { mountRef.current = false; wsRef.current?.close(); };
+    alive.current = true;
+    return () => { alive.current = false; ws.current?.close(); };
   }, []);
-  return { proposal, loading, result, fetchProposal, buy, clearResult };
+
+  return { data, buying, result, fetch, buy, clear };
 }
 
-/* ═══════════════════════════════════ component ═══ */
+/* ═══════════════════════════════ component ═══ */
 
 export default function ManualTraders() {
   const { isLoggedIn, balance, currency } = useAuth();
 
-  const [market,    setMarket]   = useState(MARKETS[0]);
-  const [mktOpen,   setMktOpen]  = useState(false);
-  const [tab,       setTab]      = useState<Tab>("rise_fall");
+  /* market */
+  const [market,   setMarket]   = useState(MARKETS[0]);
+  const [mktOpen,  setMktOpen]  = useState(false);
 
-  /* rise/fall inputs — DTrader style */
-  const [durVal,    setDurVal]   = useState("5");
-  const [durUnit,   setDurUnit]  = useState("t");   /* t=ticks, m=min, etc */
-  const [stake,     setStake]    = useState("10");
-  const [allowEq,   setAllowEq]  = useState(false);
+  /* contract type */
+  const [ctype,    setCtype]    = useState<ContractType>("accumulators");
+  const [ctOpen,   setCtOpen]   = useState(false);
 
   /* accumulators */
-  const [growth,    setGrowth]   = useState(0);
-  /* multipliers */
-  const [mul,       setMul]      = useState(0);
-  /* digits */
-  const [digitType, setDigitType]= useState(0);
-  const [digitVal,  setDigitVal] = useState("5");
+  const [growth,   setGrowth]   = useState(1);   /* 1 = 1% */
 
-  const [showAuth,  setShowAuth] = useState(false);
+  /* stake stepper */
+  const [stake,    setStake]    = useState(10);
 
-  const { price, dir } = useLivePrice(market.id);
-  const { proposal, loading, result, fetchProposal, buy, clearResult } = useTrade();
+  /* take profit */
+  const [tpOn,     setTpOn]     = useState(false);
+  const [tpAmt,    setTpAmt]    = useState(50);
 
-  /* refetch proposal whenever inputs change */
+  const [showAuth, setShowAuth] = useState(false);
+
+  const { price, dir }                   = useLivePrice(market.id);
+  const { data: prop, buying, result,
+          fetch: fetchProp, buy, clear } = useProposal();
+
+  /* fetch proposal whenever inputs change */
   useEffect(() => {
-    if (!isLoggedIn || tab !== "rise_fall") return;
-    fetchProposal(market.id, "CALL", parseInt(durVal)||1, durUnit, stake);
-  }, [isLoggedIn, tab, market.id, durVal, durUnit, stake]);
+    if (!isLoggedIn) return;
+    fetchProp(market.id, ctype, String(stake), growth);
+  }, [isLoggedIn, market.id, ctype, stake, growth]);
 
-  const fmt = (n: number) =>
-    n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 5 });
+  /* max payout (Deriv accumulators limit) */
+  const MAX_PAYOUT = 6000;
 
-  const pct = proposal
-    ? (((proposal.payout - proposal.ask) / proposal.ask) * 100).toFixed(0)
-    : null;
+  /* estimated max ticks for accumulators */
+  const maxTicks = useMemo(() => {
+    if (ctype !== "accumulators" || stake <= 0) return null;
+    return Math.floor(Math.log(MAX_PAYOUT / stake) / Math.log(1 + growth / 100));
+  }, [ctype, stake, growth]);
 
-  function handleBuy(side: "CALL"|"PUT") {
+  const fmt = (n: number, dp = 2) =>
+    n.toLocaleString("en-US", { minimumFractionDigits: dp, maximumFractionDigits: dp });
+
+  function handleBuy() {
     if (!isLoggedIn) { setShowAuth(true); return; }
-    if (!proposal)   return;
-    buy(proposal.id);
+    if (!prop) return;
+    buy(prop.id);
   }
 
-  /* ── reusable field-row ──────────────────────────────── */
-  function FieldRow({ label, children }: { label: string; children: React.ReactNode }) {
-    return (
-      <div className="mt-field-row">
-        <span className="mt-field-label">{label}</span>
-        {children}
-      </div>
-    );
+  function stepStake(delta: number) {
+    setStake(s => Math.max(1, parseFloat((s + delta).toFixed(2))));
   }
 
-  /* ── contract-type tab strip ─────────────────────────── */
-  const tabStrip = (
-    <div className="mt-tab-strip">
-      {([
-        ["rise_fall",    "Rise/Fall"   ],
-        ["accumulators", "Accumulators"],
-        ["multipliers",  "Multipliers" ],
-        ["digits",       "Digits"      ],
-      ] as [Tab, string][]).map(([id, lbl]) => (
-        <button
-          key={id}
-          onClick={() => setTab(id)}
-          className={`mt-tab-btn${tab === id ? " active" : ""}`}
-        >
-          {lbl}
-        </button>
-      ))}
-    </div>
-  );
+  /* ── rise/fall direction state (only for rise_fall tab) ── */
+  const [rfDir, setRfDir] = useState<"CALL"|"PUT">("CALL");
 
-  /* ── Rise / Fall panel ───────────────────────────────── */
-  const riseFallPanel = (
-    <div className="mt-form">
-
-      {/* Duration — DTrader style: number input + unit dropdown */}
-      <FieldRow label="Duration">
-        <div className="mt-dur-inputs">
-          <input
-            type="number"
-            value={durVal}
-            min="1"
-            onChange={e => setDurVal(e.target.value)}
-            className="mt-dur-num"
-          />
-          <select
-            value={durUnit}
-            onChange={e => setDurUnit(e.target.value)}
-            className="mt-dur-unit"
-          >
-            {DUR_UNITS.map(u => (
-              <option key={u.value} value={u.value}>{u.label}</option>
-            ))}
-          </select>
-        </div>
-      </FieldRow>
-
-      {/* Stake */}
-      <FieldRow label="Stake">
-        <div className="mt-stake-wrap">
-          <input
-            type="number"
-            value={stake}
-            min="1"
-            onChange={e => setStake(e.target.value)}
-            className="mt-stake-input"
-          />
-          <span className="mt-currency">{currency || "USD"}</span>
-        </div>
-      </FieldRow>
-
-      {/* Allow equals — DTrader toggle row */}
-      <FieldRow label="Allow equals">
-        <button
-          className="mt-toggle"
-          onClick={() => setAllowEq(v => !v)}
-          aria-label="Toggle allow equals"
-        >
-          {allowEq
-            ? <ToggleRight style={{ width: 32, height: 32, color: C.accent }} />
-            : <ToggleLeft  style={{ width: 32, height: 32, color: C.sub    }} />
-          }
-        </button>
-      </FieldRow>
-
-      {/* Payout row */}
-      <FieldRow label="Payout (est.)">
-        <span className="mt-payout-val">
-          {proposal
-            ? <>
-                <span style={{ color: C.text, fontWeight: 700 }}>
-                  ${proposal.payout.toFixed(2)}
-                </span>
-                {pct && (
-                  <span style={{ color: C.accent, fontSize: 11, marginLeft: 5 }}>
-                    +{pct}%
-                  </span>
-                )}
-              </>
-            : <span style={{ color: C.sub }}>—</span>
-          }
-        </span>
-      </FieldRow>
-
-      {/* Result banner */}
-      {result && (
-        <div className={`mt-result ${result.ok ? "ok" : "err"}`}>
-          {result.ok
-            ? <Check      style={{ width: 15, height: 15, flexShrink: 0 }} />
-            : <AlertCircle style={{ width: 15, height: 15, flexShrink: 0 }} />
-          }
-          <span>{result.msg}</span>
-          <button onClick={clearResult} className="mt-clear-btn">
-            <X style={{ width: 13, height: 13 }} />
-          </button>
-        </div>
-      )}
-
-      {/* Buy buttons — exact DTrader layout: two equal columns */}
-      <div className="mt-buy-row">
-        <button
-          className="mt-btn-rise"
-          onClick={() => handleBuy("CALL")}
-          disabled={loading || (!proposal && isLoggedIn)}
-        >
-          {loading
-            ? <Loader2 style={{ width: 16, height: 16, animation: "mt-spin 1s linear infinite" }} />
-            : <TrendingUp style={{ width: 16, height: 16 }} />
-          }
-          <span>Rise</span>
-          {proposal && !loading && (
-            <span className="mt-btn-sub">${proposal.payout.toFixed(2)}</span>
-          )}
-        </button>
-
-        <button
-          className="mt-btn-fall"
-          onClick={() => handleBuy("PUT")}
-          disabled={loading || (!proposal && isLoggedIn)}
-        >
-          {loading
-            ? <Loader2 style={{ width: 16, height: 16, animation: "mt-spin 1s linear infinite" }} />
-            : <TrendingDown style={{ width: 16, height: 16 }} />
-          }
-          <span>Fall</span>
-          {proposal && !loading && (
-            <span className="mt-btn-sub">${proposal.ask.toFixed(2)}</span>
-          )}
-        </button>
-      </div>
-    </div>
-  );
-
-  /* ── Accumulators panel ──────────────────────────────── */
-  const accumPanel = (
-    <div className="mt-form">
-      <FieldRow label="Growth Rate">
-        <div className="mt-chip-row">
-          {ACC_GROWTH.map((g, i) => (
-            <button key={i} onClick={() => setGrowth(i)} className={`mt-chip${growth===i?" active":""}`}>{g}</button>
-          ))}
-        </div>
-      </FieldRow>
-      <FieldRow label="Stake">
-        <div className="mt-stake-wrap">
-          <input type="number" value={stake} min="1" onChange={e => setStake(e.target.value)} className="mt-stake-input" />
-          <span className="mt-currency">{currency||"USD"}</span>
-        </div>
-      </FieldRow>
-      <div className="mt-info-box">
-        Accumulate profits with every tick. Position closes automatically when profit target is hit or barrier is breached.
-      </div>
-      <div className="mt-buy-row" style={{ marginTop: "auto" }}>
-        <button className="mt-btn-rise" style={{ flex:1 }} onClick={() => { if (!isLoggedIn) setShowAuth(true); }}>
-          <TrendingUp style={{ width:16, height:16 }} /><span>Buy Accumulator</span>
-        </button>
-      </div>
-    </div>
-  );
-
-  /* ── Multipliers panel ───────────────────────────────── */
-  const multiPanel = (
-    <div className="mt-form">
-      <FieldRow label="Multiplier">
-        <div className="mt-chip-row">
-          {MUL_VALUES.map((m, i) => (
-            <button key={i} onClick={() => setMul(i)} className={`mt-chip${mul===i?" active":""}`}>{m}</button>
-          ))}
-        </div>
-      </FieldRow>
-      <FieldRow label="Stake">
-        <div className="mt-stake-wrap">
-          <input type="number" value={stake} min="1" onChange={e => setStake(e.target.value)} className="mt-stake-input" />
-          <span className="mt-currency">{currency||"USD"}</span>
-        </div>
-      </FieldRow>
-      <div className="mt-buy-row" style={{ marginTop: "auto" }}>
-        <button className="mt-btn-rise" onClick={() => { if (!isLoggedIn) setShowAuth(true); }}>
-          <TrendingUp style={{ width:16, height:16 }} /><span>Up ×{MUL_VALUES[mul].replace("×","")}</span>
-        </button>
-        <button className="mt-btn-fall" onClick={() => { if (!isLoggedIn) setShowAuth(true); }}>
-          <TrendingDown style={{ width:16, height:16 }} /><span>Down ×{MUL_VALUES[mul].replace("×","")}</span>
-        </button>
-      </div>
-    </div>
-  );
-
-  /* ── Digits panel ────────────────────────────────────── */
-  const digitsPanel = (
-    <div className="mt-form">
-      <FieldRow label="Digit Type">
-        <div className="mt-chip-row" style={{ flexWrap:"wrap", gap: 5 }}>
-          {DIGIT_TYPES.map((d, i) => (
-            <button key={i} onClick={() => setDigitType(i)} className={`mt-chip${digitType===i?" active":""}`}>{d}</button>
-          ))}
-        </div>
-      </FieldRow>
-      <FieldRow label="Digit">
-        <input type="number" value={digitVal} min="0" max="9" onChange={e => setDigitVal(e.target.value)} className="mt-stake-input" style={{ maxWidth: 80 }} />
-      </FieldRow>
-      <FieldRow label="Stake">
-        <div className="mt-stake-wrap">
-          <input type="number" value={stake} min="1" onChange={e => setStake(e.target.value)} className="mt-stake-input" />
-          <span className="mt-currency">{currency||"USD"}</span>
-        </div>
-      </FieldRow>
-      <div className="mt-buy-row" style={{ marginTop: "auto" }}>
-        <button className="mt-btn-rise" style={{ flex:1 }} onClick={() => { if (!isLoggedIn) setShowAuth(true); }}>
-          <TrendingUp style={{ width:16, height:16 }} /><span>Buy Contract</span>
-        </button>
-      </div>
-    </div>
-  );
-
-  /* ── Market header bar ───────────────────────────────── */
-  const marketBar = (
-    <div className="mt-market-bar">
-      {/* Market selector */}
-      <div className="mt-mkt-wrap">
-        <button className="mt-mkt-btn" onClick={() => setMktOpen(o => !o)}>
-          <span className="mt-mkt-label">{market.label}</span>
-          <ChevronDown style={{ width:13, height:13, color:C.sub, flexShrink:0 }} />
-        </button>
-
-        {mktOpen && (
-          <>
-            <div onClick={() => setMktOpen(false)} style={{ position:"fixed", inset:0, zIndex:38 }} />
-            <div className="mt-mkt-dropdown">
-              {MARKETS.map(m => (
-                <div
-                  key={m.id}
-                  className={`mt-mkt-item${m.id===market.id?" sel":""}`}
-                  onClick={() => { setMarket(m); setMktOpen(false); }}
-                >
-                  {m.label}
-                </div>
-              ))}
-            </div>
-          </>
-        )}
-      </div>
-
-      {/* Live price — green/red on tick direction */}
-      <div className="mt-price-block">
-        {price != null
-          ? <>
-              <span className={`mt-price-val ${dir==="up"?"up":dir==="dn"?"dn":""}`}>
-                {fmt(price)}
-              </span>
-              {dir === "up"
-                ? <TrendingUp  style={{ width:13, height:13, color:C.accent, flexShrink:0 }} />
-                : dir === "dn"
-                ? <TrendingDown style={{ width:13, height:13, color:"#ef4444", flexShrink:0 }} />
-                : null
-              }
-            </>
-          : <span style={{ fontSize:12, color:C.sub }}>Connecting…</span>
-        }
-      </div>
-
-      {/* Balance (logged-in only) */}
-      {isLoggedIn && balance != null && (
-        <span className="mt-balance">
-          {balance.toFixed(2)} {currency}
-        </span>
-      )}
-    </div>
-  );
-
+  /* ─────────────────────────── render ── */
   return (
     <>
-      {/* ─────────────────── scoped styles ─────────────────── */}
+      {/* ═══════════════════ scoped styles ═══════════════════ */}
       <style>{`
-        /* ── root ── */
+        /* ── root wrapper — NO scrolling ── */
         .mt-root {
+          --avail: calc(100dvh - 132px);
           display: flex;
-          flex-direction: row;
-          height: calc(100dvh - 132px);
-          background: ${C.bg};
+          flex-direction: column;
+          height: var(--avail);
           overflow: hidden;
+          background: ${C.bg};
           font-family: 'IBM Plex Sans','Inter',system-ui,sans-serif;
           color: ${C.text};
+          position: relative;
         }
 
-        /* ── chart column (left on desktop, top on mobile) ── */
-        .mt-chart-col {
-          flex: 1;
-          min-width: 0;
-          display: flex;
-          flex-direction: column;
+        /* ── chart section ── */
+        .mt-chart-wrap {
+          flex: 0 0 53%;
+          min-height: 0;
+          width: 100%;
+          position: relative;
+          overflow: hidden;
         }
-        .mt-chart-area {
+
+        /* ── panel section ── */
+        .mt-panel {
           flex: 1;
           min-height: 0;
-        }
-
-        /* ── trade panel (right on desktop, bottom on mobile) ── */
-        .mt-panel {
-          width: 300px;
-          flex-shrink: 0;
+          background: ${C.panel};
+          border-top: 1px solid ${C.border};
           display: flex;
           flex-direction: column;
-          background: ${C.panel};
-          border-left: 1px solid ${C.border};
-          overflow-y: auto;
-          -webkit-overflow-scrolling: touch;
+          overflow: hidden;
         }
 
-        /* ── market bar ── */
-        .mt-market-bar {
+        /* ─── market + price row ─── */
+        .mt-market-row {
           display: flex;
           align-items: center;
-          gap: 10px;
+          gap: 8px;
           padding: 0 12px;
-          height: 46px;
+          height: 44px;
           background: ${C.bg};
           border-bottom: 1px solid ${C.border};
           flex-shrink: 0;
         }
-        .mt-mkt-wrap { position: relative; }
+
+        /* market picker */
         .mt-mkt-btn {
           display: flex; align-items: center; gap: 5px;
           background: ${C.field}; border: 1px solid ${C.border};
-          border-radius: 8px; padding: 5px 9px;
-          color: ${C.text}; font-size: 13px; font-weight: 600;
-          cursor: pointer; white-space: nowrap;
+          border-radius: 8px; padding: 5px 10px;
+          color: ${C.text}; font-size: 12px; font-weight: 700;
+          cursor: pointer; white-space: nowrap; flex-shrink: 0;
+          max-width: 175px;
         }
-        .mt-mkt-label { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .mt-mkt-dropdown {
-          position: absolute; top: calc(100% + 5px); left: 0; z-index: 39;
-          background: #162135; border: 1px solid ${C.border};
+        .mt-mkt-label {
+          overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .mt-dropdown {
+          position: fixed; z-index: 50;
+          background: #0d1e36; border: 1px solid ${C.border};
           border-radius: 10px; padding: 4px;
-          box-shadow: 0 8px 32px rgba(0,0,0,0.6);
-          max-height: 280px; overflow-y: auto; min-width: 230px;
+          box-shadow: 0 10px 40px rgba(0,0,0,0.7);
+          max-height: 260px; overflow-y: auto; min-width: 210px;
         }
-        .mt-mkt-item {
-          padding: 8px 12px; font-size: 13px; color: ${C.text};
-          cursor: pointer; border-radius: 7px;
+        .mt-dd-item {
+          padding: 8px 12px; font-size: 12px; font-weight: 600;
+          color: ${C.text}; cursor: pointer; border-radius: 7px;
+          transition: background 0.1s;
         }
-        .mt-mkt-item:hover { background: rgba(75,126,232,0.15); }
-        .mt-mkt-item.sel   { background: rgba(75,126,232,0.2); font-weight: 700; }
+        .mt-dd-item:hover { background: rgba(59,130,246,0.15); }
+        .mt-dd-item.sel   { background: rgba(59,130,246,0.22); color: #60a5fa; }
 
-        /* price */
-        .mt-price-block { display: flex; align-items: center; gap: 4px; }
-        .mt-price-val {
-          font-size: 17px; font-weight: 800;
+        /* live price */
+        .mt-price {
+          margin-left: auto;
+          display: flex; align-items: center; gap: 4px;
+          font-size: 18px; font-weight: 800;
           letter-spacing: 0.01em; font-variant-numeric: tabular-nums;
-          color: ${C.text}; transition: color 0.15s;
+          transition: color 0.12s;
         }
-        .mt-price-val.up { color: ${C.accent}; }
-        .mt-price-val.dn { color: #ef4444; }
-        .mt-balance {
-          margin-left: auto; font-size: 12px; font-weight: 600;
-          color: ${C.sub}; white-space: nowrap;
+        .mt-price.up { color: ${C.rise}; }
+        .mt-price.dn { color: ${C.fall}; }
+        .mt-price.neutral { color: ${C.text}; }
+
+        .mt-balance-chip {
+          font-size: 11px; font-weight: 600;
+          color: ${C.sub}; white-space: nowrap; flex-shrink: 0;
         }
 
-        /* ── contract type tab strip ── */
-        .mt-tab-strip {
-          display: flex;
-          overflow-x: auto;
-          scroll-behavior: smooth;
-          -webkit-overflow-scrolling: touch;
-          border-bottom: 1px solid ${C.border};
-          flex-shrink: 0;
-          scrollbar-width: none;
-        }
-        .mt-tab-strip::-webkit-scrollbar { display: none; }
-        .mt-tab-btn {
-          flex-shrink: 0;
-          padding: 10px 14px;
-          font-size: 12px; font-weight: 700;
-          color: ${C.sub}; background: transparent; border: none;
-          border-bottom: 2px solid transparent;
-          cursor: pointer; transition: all 0.15s;
-          white-space: nowrap; letter-spacing: 0.03em;
-        }
-        .mt-tab-btn.active {
-          color: ${C.accent};
-          border-bottom-color: ${C.accent};
-        }
-
-        /* ── form area ── */
-        .mt-form {
+        /* ─── controls stack (below market row) ─── */
+        .mt-controls {
           flex: 1;
           display: flex;
           flex-direction: column;
-          padding: 0;
-          overflow-y: auto;
+          padding: 10px 12px;
+          gap: 8px;
+          overflow: hidden;
         }
 
-        /* ── field row — exact DTrader pattern ── */
-        .mt-field-row {
+        /* ─── section rows ─── */
+        .mt-row {
           display: flex;
           align-items: center;
-          justify-content: space-between;
-          padding: 0 14px;
-          height: 54px;
-          border-bottom: 1px solid ${C.border};
-          flex-shrink: 0;
-          gap: 10px;
-        }
-        .mt-field-label {
-          font-size: 13px; font-weight: 500; color: ${C.sub};
+          gap: 8px;
+          background: ${C.row};
+          border: 1px solid ${C.border};
+          border-radius: 10px;
+          padding: 9px 12px;
           flex-shrink: 0;
         }
-
-        /* Duration — two inputs side by side */
-        .mt-dur-inputs { display: flex; gap: 6px; align-items: center; }
-        .mt-dur-num {
-          width: 56px;
-          background: ${C.field}; border: 1px solid ${C.border2};
-          border-radius: 7px; padding: 7px 10px;
-          color: ${C.text}; font-size: 14px; font-weight: 700;
-          text-align: center; outline: none;
-        }
-        .mt-dur-unit {
-          background: ${C.field}; border: 1px solid ${C.border2};
-          border-radius: 7px; padding: 7px 10px;
-          color: ${C.text}; font-size: 13px; font-weight: 600;
-          outline: none; cursor: pointer; appearance: auto;
+        .mt-row-label {
+          font-size: 11px; font-weight: 600; color: ${C.sub};
+          text-transform: uppercase; letter-spacing: 0.06em;
+          white-space: nowrap; flex-shrink: 0;
         }
 
-        /* Stake */
-        .mt-stake-wrap { display: flex; align-items: center; gap: 6px; }
-        .mt-stake-input {
-          width: 90px;
-          background: ${C.field}; border: 1px solid ${C.border2};
-          border-radius: 7px; padding: 7px 10px;
-          color: ${C.text}; font-size: 14px; font-weight: 700;
+        /* contract type selector */
+        .mt-ct-btn {
+          display: flex; align-items: center; gap: 5px;
+          background: ${C.field}; border: 1px solid ${C.border};
+          border-radius: 8px; padding: 5px 10px;
+          color: ${C.text}; font-size: 12px; font-weight: 700;
+          cursor: pointer; white-space: nowrap; flex-shrink: 0;
+        }
+
+        /* growth chips */
+        .mt-chips {
+          display: flex; gap: 5px; margin-left: auto;
+        }
+        .mt-chip {
+          min-width: 34px; padding: 5px 4px; text-align: center;
+          background: ${C.chip}; border: 1px solid ${C.border};
+          border-radius: 7px; color: ${C.sub};
+          font-size: 11px; font-weight: 700;
+          cursor: pointer; transition: all 0.13s; flex-shrink: 0;
+        }
+        .mt-chip.sel {
+          background: ${C.chipSel}; border-color: ${C.chipSel}; color: #fff;
+        }
+
+        /* rise/fall toggle (for rise_fall tab) */
+        .mt-rf-toggle {
+          display: flex; gap: 6px; width: 100%;
+        }
+        .mt-rf-btn {
+          flex: 1; padding: 8px 0; border-radius: 8px;
+          font-size: 13px; font-weight: 700;
+          border: none; cursor: pointer; transition: all 0.13s;
+          display: flex; align-items: center; justify-content: center; gap: 5px;
+        }
+        .mt-rf-btn.rise-sel   { background: ${C.rise}; color: #fff; }
+        .mt-rf-btn.rise-unsel { background: ${C.chip}; color: ${C.sub}; border: 1px solid ${C.border}; }
+        .mt-rf-btn.fall-sel   { background: ${C.fall}; color: #fff; }
+        .mt-rf-btn.fall-unsel { background: ${C.chip}; color: ${C.sub}; border: 1px solid ${C.border}; }
+
+        /* stake stepper */
+        .mt-stake-row {
+          display: flex; align-items: center;
+          background: ${C.row}; border: 1px solid ${C.border};
+          border-radius: 10px; padding: 8px 12px;
+          gap: 10px; flex-shrink: 0;
+        }
+        .mt-stake-label {
+          font-size: 11px; font-weight: 600; color: ${C.sub};
+          text-transform: uppercase; letter-spacing: 0.06em; flex-shrink: 0;
+        }
+        .mt-stepper {
+          display: flex; align-items: center; gap: 8px; margin-left: auto;
+        }
+        .mt-step-btn {
+          width: 32px; height: 32px; border-radius: 8px;
+          background: ${C.field}; border: 1px solid ${C.border};
+          color: ${C.text}; display: flex; align-items: center; justify-content: center;
+          cursor: pointer; transition: all 0.13s; flex-shrink: 0;
+        }
+        .mt-step-btn:active { background: ${C.accent}; border-color: ${C.accent}; }
+        .mt-stake-display {
+          font-size: 17px; font-weight: 800; color: ${C.text};
+          min-width: 80px; text-align: center;
+          font-variant-numeric: tabular-nums;
+        }
+        .mt-stake-ccy {
+          font-size: 12px; font-weight: 600; color: ${C.sub}; flex-shrink: 0;
+        }
+
+        /* take profit */
+        .mt-tp-row {
+          display: flex; align-items: center; gap: 10px;
+          background: ${C.row}; border: 1px solid ${C.border};
+          border-radius: 10px; padding: 8px 12px; flex-shrink: 0;
+        }
+        .mt-checkbox {
+          width: 18px; height: 18px; border-radius: 5px;
+          border: 2px solid ${C.border}; background: ${C.field};
+          display: flex; align-items: center; justify-content: center;
+          cursor: pointer; transition: all 0.13s; flex-shrink: 0;
+        }
+        .mt-checkbox.on {
+          background: ${C.accent}; border-color: ${C.accent};
+        }
+        .mt-tp-label {
+          font-size: 13px; font-weight: 600; color: ${C.text}; cursor: pointer;
+        }
+        .mt-tp-input {
+          margin-left: auto;
+          width: 70px; background: ${C.field}; border: 1px solid ${C.border};
+          border-radius: 7px; padding: 5px 8px;
+          color: ${C.text}; font-size: 13px; font-weight: 700;
           text-align: right; outline: none;
         }
-        .mt-currency { font-size: 12px; font-weight: 600; color: ${C.sub}; }
+        .mt-tp-input:disabled { opacity: 0.35; }
 
-        /* Allow equals toggle */
-        .mt-toggle {
-          background: transparent; border: none; cursor: pointer; padding: 0;
+        /* info row */
+        .mt-info-row {
           display: flex; align-items: center;
+          background: ${C.row}; border: 1px solid ${C.border};
+          border-radius: 10px; padding: 8px 12px;
+          gap: 6px; flex-shrink: 0;
         }
+        .mt-info-cell {
+          display: flex; align-items: center; gap: 5px; flex: 1;
+        }
+        .mt-info-cell + .mt-info-cell {
+          border-left: 1px solid ${C.border}; padding-left: 10px;
+        }
+        .mt-info-lbl {
+          font-size: 10px; font-weight: 600; color: ${C.sub};
+          text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap;
+        }
+        .mt-info-val {
+          font-size: 13px; font-weight: 700; color: ${C.text};
+          font-variant-numeric: tabular-nums; margin-left: auto;
+        }
+        .mt-info-val.green { color: ${C.rise}; }
 
-        /* Payout */
-        .mt-payout-val { display: flex; align-items: center; }
-
-        /* Result banner */
+        /* result banner */
         .mt-result {
           display: flex; align-items: center; gap: 7px;
-          padding: 9px 14px; font-size: 12px;
-          flex-shrink: 0;
+          border-radius: 8px; padding: 8px 12px;
+          font-size: 12px; flex-shrink: 0;
         }
-        .mt-result.ok  { background: #0d3320; color: #4ade80; }
-        .mt-result.err { background: #3b0a0a; color: #f87171; }
-        .mt-clear-btn { background:transparent; border:none; cursor:pointer; padding:0; margin-left:auto; color:inherit; }
+        .mt-result.ok  { background: #0a2e1a; color: #4ade80; border: 1px solid #15503a; }
+        .mt-result.err { background: #2d0a0a; color: #f87171; border: 1px solid #5c1e1e; }
+        .mt-clear-btn { background:transparent; border:none; cursor:pointer; padding:0; color:inherit; margin-left:auto; }
 
-        /* ── Buy buttons — DTrader two-column ── */
-        .mt-buy-row {
-          display: flex;
-          gap: 1px;
-          padding: 10px 10px;
+        /* ─── buy button ─── */
+        .mt-buy-wrap {
           flex-shrink: 0;
         }
-        .mt-btn-rise, .mt-btn-fall {
-          flex: 1;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          gap: 3px;
-          padding: 14px 8px;
+        .mt-buy-btn {
+          width: 100%;
+          display: flex; align-items: center; justify-content: center; gap: 8px;
+          background: ${C.green};
           border: none; border-radius: 10px;
-          font-size: 15px; font-weight: 800;
+          color: #fff; font-size: 16px; font-weight: 800;
+          padding: 16px 0;
           cursor: pointer; transition: all 0.15s;
-          min-height: 64px;
+          box-shadow: 0 4px 20px rgba(0,192,118,0.30);
+          letter-spacing: 0.02em;
         }
-        .mt-btn-rise { background: ${C.rise}; color: #fff; margin-right: 5px; box-shadow: 0 3px 16px rgba(0,136,119,0.35); }
-        .mt-btn-fall { background: ${C.fall}; color: #fff; box-shadow: 0 3px 16px rgba(204,46,61,0.35); }
-        .mt-btn-rise:disabled, .mt-btn-fall:disabled { opacity: 0.5; cursor: not-allowed; }
-        .mt-btn-sub { font-size: 11px; font-weight: 500; opacity: 0.85; }
+        .mt-buy-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .mt-buy-btn:active   { transform: scale(0.99); }
+        .mt-buy-btn.rise-btn { background: ${C.rise}; box-shadow: 0 4px 20px rgba(0,184,150,0.30); }
+        .mt-buy-btn.fall-btn { background: ${C.fall}; box-shadow: 0 4px 20px rgba(229,57,53,0.30); }
+        .mt-buy-sub {
+          font-size: 11px; font-weight: 500; opacity: 0.85;
+        }
 
-        /* chips (for accum/multi/digits) */
-        .mt-chip-row { display: flex; gap: 5px; flex-wrap: nowrap; }
-        .mt-chip {
-          flex: 1; padding: 6px 4px;
+        /* login prompt */
+        .mt-login-bar {
           background: ${C.field}; border: 1px solid ${C.border};
-          border-radius: 7px; color: ${C.sub};
-          font-size: 12px; font-weight: 700;
-          cursor: pointer; transition: all 0.15s; text-align: center;
+          border-radius: 10px; padding: 10px 14px;
+          display: flex; align-items: center; justify-content: space-between;
+          gap: 10px; flex-shrink: 0;
         }
-        .mt-chip.active { background: ${C.blue}; border-color: ${C.blue}; color: #fff; }
-
-        .mt-info-box {
-          margin: 10px 14px; padding: 10px 12px;
-          background: #0f2040; border-radius: 8px;
-          border: 1px solid ${C.border};
-          font-size: 11px; color: ${C.sub}; line-height: 1.6;
+        .mt-login-bar-text {
+          font-size: 12px; color: ${C.sub};
         }
-
-        /* Login prompt */
-        .mt-login-prompt {
-          margin: 0 14px 14px;
-          padding: 12px 14px;
-          background: #0f2040; border-radius: 10px;
-          border: 1px solid ${C.border};
-          text-align: center;
-          flex-shrink: 0;
+        .mt-login-bar-btn {
+          background: ${C.accent}; color: #fff;
+          border: none; border-radius: 8px;
+          padding: 7px 14px; font-size: 12px; font-weight: 700;
+          cursor: pointer; white-space: nowrap; flex-shrink: 0;
         }
 
-        /* ──────────────────────────────── MOBILE ≤ 767px ── */
-        @media (max-width: 767px) {
+        /* ── desktop: side-by-side ── */
+        @media (min-width: 768px) {
           .mt-root {
-            flex-direction: column;
-            overflow-y: auto;
-            height: calc(100dvh - 132px);
+            flex-direction: row;
           }
-          /* Chart: 55% of available height */
-          .mt-chart-col {
-            flex: none;
-            width: 100%;
-            height: 55%;
-          }
-          .mt-chart-area {
+          .mt-chart-wrap {
             flex: 1;
+            height: 100%;
           }
-          /* Panel: remaining 45% */
           .mt-panel {
             flex: none;
-            width: 100%;
-            height: 45%;
-            border-left: none;
-            border-top: 1px solid ${C.border};
+            width: 320px;
+            border-top: none;
+            border-left: 1px solid ${C.border};
             overflow-y: auto;
           }
-          /* Compact market bar */
-          .mt-market-bar {
-            height: 40px;
-            padding: 0 10px;
+          .mt-controls {
+            overflow-y: auto;
           }
-          .mt-mkt-label { max-width: 130px; font-size: 12px; }
-          .mt-price-val { font-size: 15px; }
-
-          /* Tabs compact */
-          .mt-tab-btn { padding: 8px 12px; font-size: 11px; }
-
-          /* Field rows compact */
-          .mt-field-row { height: 48px; padding: 0 10px; }
-          .mt-field-label { font-size: 12px; }
-
-          /* Inputs */
-          .mt-dur-num  { width: 48px; padding: 6px 8px; font-size: 13px; }
-          .mt-dur-unit { padding: 6px 8px; font-size: 12px; }
-          .mt-stake-input { width: 76px; padding: 6px 8px; font-size: 13px; }
-
-          /* Buy buttons compact */
-          .mt-buy-row { padding: 8px; }
-          .mt-btn-rise, .mt-btn-fall { min-height: 54px; padding: 10px 8px; font-size: 14px; }
         }
 
-        /* ── spin animation ── */
-        @keyframes mt-spin { to { transform: rotate(360deg); } }
-
-        /* ── number input: hide spinners ── */
+        /* number input: no spinners */
         input[type=number]::-webkit-outer-spin-button,
         input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
         input[type=number] { -moz-appearance: textfield; }
+
+        /* spin animation */
+        @keyframes mt-spin { to { transform: rotate(360deg); } }
       `}</style>
 
-      {/* ──────────────────────────── render ── */}
       <div className="mt-root">
 
-        {/* LEFT / TOP: chart column */}
-        <div className="mt-chart-col">
-          {marketBar}
-          <div className="mt-chart-area">
-            <LightweightChart symbol={market.id} tradingMode onPriceUpdate={() => {}} />
-          </div>
+        {/* ═══ CHART SECTION ═══ */}
+        <div className="mt-chart-wrap">
+          <LightweightChart symbol={market.id} tradingMode onPriceUpdate={() => {}} />
         </div>
 
-        {/* RIGHT / BOTTOM: trade panel */}
+        {/* ═══ PANEL SECTION ═══ */}
         <div className="mt-panel">
-          {tabStrip}
 
-          {/* Tab content */}
-          {tab === "rise_fall"    && riseFallPanel}
-          {tab === "accumulators" && accumPanel}
-          {tab === "multipliers"  && multiPanel}
-          {tab === "digits"       && digitsPanel}
+          {/* ── Market + live price row ── */}
+          <div className="mt-market-row">
 
-          {/* Login prompt — all tabs */}
-          {!isLoggedIn && (
-            <div className="mt-login-prompt">
-              <p style={{ margin: "0 0 8px", fontSize: 12, color: C.sub, lineHeight: 1.5 }}>
-                Log in to place real trades and see live payout quotes.
-              </p>
-              <button
-                onClick={() => setShowAuth(true)}
-                style={{
-                  background: C.blue, color: "#fff", fontWeight: 700,
-                  fontSize: 12, padding: "7px 20px",
-                  borderRadius: 8, border: "none", cursor: "pointer",
-                }}
-              >
-                Log In / Sign Up
+            {/* Market picker */}
+            <div style={{ position: "relative" }}>
+              <button className="mt-mkt-btn" onClick={() => setMktOpen(o => !o)}>
+                <span className="mt-mkt-label">{market.label}</span>
+                <ChevronDown style={{ width: 12, height: 12, flexShrink: 0, color: C.sub }} />
               </button>
+              {mktOpen && (
+                <>
+                  <div
+                    style={{ position: "fixed", inset: 0, zIndex: 49 }}
+                    onClick={() => setMktOpen(false)}
+                  />
+                  <div className="mt-dropdown" style={{ top: "calc(100% + 6px)", left: 0, zIndex: 50 }}>
+                    {MARKETS.map(m => (
+                      <div
+                        key={m.id}
+                        className={`mt-dd-item${m.id === market.id ? " sel" : ""}`}
+                        onClick={() => { setMarket(m); setMktOpen(false); }}
+                      >
+                        {m.label}
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
-          )}
-        </div>
 
+            {/* Live price */}
+            <div className={`mt-price ${dir === "up" ? "up" : dir === "dn" ? "dn" : "neutral"}`}>
+              {price != null
+                ? price.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 5 })
+                : <span style={{ fontSize: 12, color: C.sub }}>—</span>
+              }
+            </div>
+
+            {/* Balance */}
+            {isLoggedIn && balance != null && (
+              <span className="mt-balance-chip">{balance.toFixed(2)} {currency}</span>
+            )}
+          </div>
+
+          {/* ── Controls stack ── */}
+          <div className="mt-controls">
+
+            {/* CONTRACT TYPE + GROWTH CHIPS */}
+            <div className="mt-row">
+              {/* Type selector */}
+              <div style={{ position: "relative" }}>
+                <button className="mt-ct-btn" onClick={() => setCtOpen(o => !o)}>
+                  {CONTRACT_LABELS[ctype]}
+                  <ChevronDown style={{ width: 11, height: 11, color: C.sub }} />
+                </button>
+                {ctOpen && (
+                  <>
+                    <div
+                      style={{ position: "fixed", inset: 0, zIndex: 49 }}
+                      onClick={() => setCtOpen(false)}
+                    />
+                    <div
+                      className="mt-dropdown"
+                      style={{ top: "calc(100% + 6px)", left: 0, zIndex: 50, minWidth: 160 }}
+                    >
+                      {(Object.keys(CONTRACT_LABELS) as ContractType[]).map(ct => (
+                        <div
+                          key={ct}
+                          className={`mt-dd-item${ct === ctype ? " sel" : ""}`}
+                          onClick={() => { setCtype(ct); setCtOpen(false); }}
+                        >
+                          {CONTRACT_LABELS[ct]}
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Growth chips (accumulators) */}
+              {ctype === "accumulators" && (
+                <div className="mt-chips">
+                  {GROWTH_RATES.map(g => (
+                    <button
+                      key={g}
+                      className={`mt-chip${growth === g ? " sel" : ""}`}
+                      onClick={() => setGrowth(g)}
+                    >
+                      {g}%
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Rise/Fall toggle */}
+              {ctype === "rise_fall" && (
+                <div className="mt-rf-toggle">
+                  <button
+                    className={`mt-rf-btn ${rfDir === "CALL" ? "rise-sel" : "rise-unsel"}`}
+                    onClick={() => setRfDir("CALL")}
+                  >
+                    <TrendingUp style={{ width: 14, height: 14 }} />
+                    Rise
+                  </button>
+                  <button
+                    className={`mt-rf-btn ${rfDir === "PUT" ? "fall-sel" : "fall-unsel"}`}
+                    onClick={() => setRfDir("PUT")}
+                  >
+                    Rise
+                    Fall
+                  </button>
+                </div>
+              )}
+
+              {/* Multiplier info */}
+              {ctype === "multipliers" && (
+                <span style={{ fontSize: 12, color: C.sub, marginLeft: "auto" }}>
+                  Up / Down — ×10 to ×500
+                </span>
+              )}
+            </div>
+
+            {/* STAKE STEPPER */}
+            <div className="mt-stake-row">
+              <span className="mt-stake-label">Stake</span>
+              <div className="mt-stepper">
+                <button className="mt-step-btn" onClick={() => stepStake(-1)}>
+                  <Minus style={{ width: 14, height: 14 }} />
+                </button>
+                <span className="mt-stake-display">
+                  ${stake.toFixed(2)}
+                </span>
+                <button className="mt-step-btn" onClick={() => stepStake(1)}>
+                  <Plus style={{ width: 14, height: 14 }} />
+                </button>
+                <span className="mt-stake-ccy">{currency || "USD"}</span>
+              </div>
+            </div>
+
+            {/* TAKE PROFIT */}
+            <div className="mt-tp-row">
+              <div
+                className={`mt-checkbox${tpOn ? " on" : ""}`}
+                onClick={() => setTpOn(v => !v)}
+              >
+                {tpOn && <Check style={{ width: 11, height: 11, color: "#fff" }} />}
+              </div>
+              <span className="mt-tp-label" onClick={() => setTpOn(v => !v)}>
+                Take profit
+              </span>
+              <input
+                type="number"
+                className="mt-tp-input"
+                value={tpAmt}
+                min="1"
+                disabled={!tpOn}
+                onChange={e => setTpAmt(parseFloat(e.target.value) || 0)}
+              />
+              <span style={{ fontSize: 12, color: C.sub, flexShrink: 0 }}>
+                {currency || "USD"}
+              </span>
+            </div>
+
+            {/* INFO ROW: max payout + max ticks */}
+            <div className="mt-info-row">
+              <div className="mt-info-cell">
+                <span className="mt-info-lbl">Max Payout</span>
+                <span className="mt-info-val green">
+                  ${(6000).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                </span>
+              </div>
+              {ctype === "accumulators" && maxTicks != null && (
+                <div className="mt-info-cell">
+                  <span className="mt-info-lbl">Max Ticks</span>
+                  <span className="mt-info-val">
+                    {maxTicks.toLocaleString()}
+                  </span>
+                </div>
+              )}
+              {prop && (
+                <div className="mt-info-cell">
+                  <span className="mt-info-lbl">Payout Est.</span>
+                  <span className="mt-info-val green">${prop.payout.toFixed(2)}</span>
+                </div>
+              )}
+            </div>
+
+            {/* RESULT BANNER */}
+            {result && (
+              <div className={`mt-result ${result.ok ? "ok" : "err"}`}>
+                {result.ok
+                  ? <Check       style={{ width: 14, height: 14, flexShrink: 0 }} />
+                  : <AlertCircle style={{ width: 14, height: 14, flexShrink: 0 }} />
+                }
+                <span style={{ flex: 1 }}>{result.msg}</span>
+                <button className="mt-clear-btn" onClick={clear}>
+                  <X style={{ width: 12, height: 12 }} />
+                </button>
+              </div>
+            )}
+
+            {/* LOGIN PROMPT */}
+            {!isLoggedIn && (
+              <div className="mt-login-bar">
+                <span className="mt-login-bar-text">
+                  Log in for live quotes & real trades
+                </span>
+                <button className="mt-login-bar-btn" onClick={() => setShowAuth(true)}>
+                  Log In
+                </button>
+              </div>
+            )}
+
+            {/* BUY BUTTON */}
+            <div className="mt-buy-wrap">
+              {ctype === "rise_fall" ? (
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button
+                    className="mt-buy-btn rise-btn"
+                    style={{ flex: 1, padding: "14px 0", fontSize: 14 }}
+                    disabled={buying || (!prop && isLoggedIn)}
+                    onClick={() => { setRfDir("CALL"); handleBuy(); }}
+                  >
+                    {buying
+                      ? <Loader2 style={{ width:16,height:16, animation:"mt-spin 1s linear infinite" }} />
+                      : <TrendingUp style={{ width:16,height:16 }} />
+                    }
+                    Rise
+                  </button>
+                  <button
+                    className="mt-buy-btn fall-btn"
+                    style={{ flex: 1, padding: "14px 0", fontSize: 14 }}
+                    disabled={buying || (!prop && isLoggedIn)}
+                    onClick={() => { setRfDir("PUT"); handleBuy(); }}
+                  >
+                    {buying
+                      ? <Loader2 style={{ width:16,height:16, animation:"mt-spin 1s linear infinite" }} />
+                      : <TrendingUp style={{ width:16,height:16, transform:"scaleY(-1)" }} />
+                    }
+                    Fall
+                  </button>
+                </div>
+              ) : (
+                <button
+                  className="mt-buy-btn"
+                  disabled={buying || (!prop && isLoggedIn)}
+                  onClick={handleBuy}
+                >
+                  {buying ? (
+                    <Loader2 style={{ width: 18, height: 18, animation: "mt-spin 1s linear infinite" }} />
+                  ) : (
+                    <TrendingUp style={{ width: 18, height: 18 }} />
+                  )}
+                  <span>
+                    {ctype === "accumulators" ? "Buy Accumulator" : "Buy Contract"}
+                  </span>
+                  {prop && !buying && (
+                    <span className="mt-buy-sub">${prop.payout.toFixed(2)}</span>
+                  )}
+                </button>
+              )}
+            </div>
+
+          </div>{/* end .mt-controls */}
+        </div>{/* end .mt-panel */}
       </div>
 
       <AuthGateModal open={showAuth} onClose={() => setShowAuth(false)} />
