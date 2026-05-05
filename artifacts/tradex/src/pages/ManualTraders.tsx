@@ -3,15 +3,14 @@ import {
   TrendingUp, BarChart2, Zap, Hash, ArrowUpDown, Layers, CircleDot,
   Info, X, Search, Star, ChevronDown, ChevronRight, CandlestickChart,
 } from "lucide-react";
-import { DERIV_APP_ID, OAUTH_APP_ID } from "@/context/AuthContext";
+import { DERIV_APP_ID } from "@/context/AuthContext";
 import { useAuth } from "@/context/AuthContext";
 import LightweightChart from "@/components/LightweightChart";
+import AuthGateModal from "@/components/AuthGateModal";
 
 const WS_URL        = `wss://ws.binaryws.com/websockets/v3?app_id=${DERIV_APP_ID}`;
 const PING_INTERVAL = 25_000;
 const RETRY_DELAY   = 3_000;
-const REDIRECT_URI  = "https://dev-utility-hub--apexricky20.replit.app/callback";
-const LOGIN_URL     = `https://oauth.deriv.com/oauth2/authorize?app_id=${OAUTH_APP_ID}&l=EN&brand=deriv&redirect_uri=${encodeURIComponent(REDIRECT_URI)}`;
 const FAV_KEY       = "tradex-fav-markets";
 
 interface Market { id: string; label: string; badge: string }
@@ -310,7 +309,8 @@ export default function ManualTraders() {
   const [growthRate, setGrowthRate]     = useState(3);
   const [takeProfitOn, setTakeProfitOn] = useState(false);
   const [takeProfit, setTakeProfit]     = useState("");
-  const [buyStatus, setBuyStatus]       = useState<string | null>(null);
+  const [buyStatus,    setBuyStatus]    = useState<string | null>(null);
+  const [showAuthGate, setShowAuthGate] = useState(false);
 
   const wsRef    = useRef<WebSocket | null>(null);
   const mountRef = useRef(true);
@@ -389,7 +389,7 @@ export default function ManualTraders() {
   const connDot = connStatus === "live" ? "bg-[#22C55E]" : connStatus === "error" ? "bg-[#EF4444] animate-pulse" : "bg-[#F59E0B] animate-pulse";
 
   const handleBuy = () => {
-    if (!isLoggedIn) { window.location.href = LOGIN_URL; return; }
+    if (!isLoggedIn) { setShowAuthGate(true); return; }
     const token = localStorage.getItem("deriv_token");
     if (!token) { setBuyStatus("No token — please log in"); return; }
     setBuyStatus("Placing...");
@@ -421,6 +421,8 @@ export default function ManualTraders() {
       className="flex flex-col"
       style={{ height: "calc(100dvh - 132px)", background: "#f2f3f4", fontFamily: "'IBM Plex Sans', 'Inter', sans-serif" }}
     >
+      <AuthGateModal open={showAuthGate} onClose={() => setShowAuthGate(false)} />
+
       {showMarkets && (
         <MarketsBottomSheet selected={sym} onSelect={s => setSym(s)} onClose={() => setShowMarkets(false)} />
       )}

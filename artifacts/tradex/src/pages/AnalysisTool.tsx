@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { Settings, RefreshCw, TrendingUp, TrendingDown, X } from "lucide-react";
 import { DERIV_APP_ID, OAUTH_APP_ID } from "@/context/AuthContext";
 import { useAuth } from "@/context/AuthContext";
+import AuthGateModal from "@/components/AuthGateModal";
 
 const WS_URL       = `wss://ws.binaryws.com/websockets/v3?app_id=${DERIV_APP_ID}`;
 const REDIRECT_URI = "https://dev-utility-hub--apexricky20.replit.app/callback";
@@ -1267,12 +1268,14 @@ function CFGNumber({ label, value, onChange, suffix, min = 0, step = 1 }: {
 }
 
 /* ── Modal component ──────────────────────────────────────────────────────── */
-function TradingConfigModal({ open, onClose, config, onChange, onRun }: {
-  open:     boolean;
-  onClose:  () => void;
-  config:   TradingConfig;
-  onChange: (k: keyof TradingConfig, v: string | number) => void;
-  onRun:    () => void;
+function TradingConfigModal({ open, onClose, config, onChange, onRun, runStatus, isRunning }: {
+  open:       boolean;
+  onClose:    () => void;
+  config:     TradingConfig;
+  onChange:   (k: keyof TradingConfig, v: string | number) => void;
+  onRun:      () => void;
+  runStatus?: string | null;
+  isRunning?: boolean;
 }) {
   useEffect(() => {
     if (!open) return;
@@ -1410,17 +1413,38 @@ function TradingConfigModal({ open, onClose, config, onChange, onRun }: {
         </div>
 
         {/* ── Footer ── */}
-        <div className="px-5 py-4 border-t border-[#F0F0F0] shrink-0 bg-[#FAFAFA] flex items-center justify-between gap-3">
-          <button
-            onClick={onRun}
-            className="flex items-center gap-2 px-6 py-2.5 bg-[#22C55E] hover:bg-[#16A34A] active:scale-[0.97] text-white text-sm font-bold rounded-xl transition-all shadow-sm shadow-[#22C55E]/30"
-          >
-            <TrendingUp className="w-4 h-4" />
-            Run
-          </button>
-          <span className="text-[11px] text-[#9CA3AF] text-right leading-tight">
-            Changes apply<br />immediately
-          </span>
+        <div className="px-5 py-4 border-t border-[#F0F0F0] shrink-0 bg-[#FAFAFA] flex flex-col gap-2">
+          {/* Status message */}
+          {runStatus && (
+            <div
+              className="w-full text-xs font-medium text-center px-3 py-2 rounded-lg"
+              style={{
+                color: runStatus.startsWith("✓") ? "#16A34A"
+                     : runStatus.startsWith("Error") || runStatus.startsWith("!") ? "#EF4444"
+                     : "#1E90FF",
+                backgroundColor: runStatus.startsWith("✓") ? "#F0FDF4"
+                                : runStatus.startsWith("Error") || runStatus.startsWith("!") ? "#FEF2F2"
+                                : "#EFF6FF",
+              }}
+            >
+              {runStatus}
+            </div>
+          )}
+          <div className="flex items-center justify-between gap-3">
+            <button
+              onClick={onRun}
+              disabled={isRunning}
+              className="flex items-center gap-2 px-6 py-2.5 bg-[#22C55E] hover:bg-[#16A34A] active:scale-[0.97] disabled:opacity-60 disabled:cursor-not-allowed text-white text-sm font-bold rounded-xl transition-all shadow-sm shadow-[#22C55E]/30"
+            >
+              {isRunning
+                ? <RefreshCw className="w-4 h-4 animate-spin" />
+                : <TrendingUp className="w-4 h-4" />}
+              {isRunning ? "Placing..." : "Run"}
+            </button>
+            <span className="text-[11px] text-[#9CA3AF] text-right leading-tight">
+              Executes trade<br />with your config
+            </span>
+          </div>
         </div>
       </div>
 
@@ -1438,14 +1462,90 @@ function TradingConfigModal({ open, onClose, config, onChange, onRun }: {
 // MAIN — AnalysisTool
 // ══════════════════════════════════════════════════════════════════════════════
 export default function AnalysisTool() {
-  const [activeTab,   setActiveTab]   = useState("circles");
-  const [globalSym,   setGlobalSym]   = useState("R_10");
-  const [tickWindow,  setTickWindow]  = useState(1000);
-  const [showConfig,  setShowConfig]  = useState(false);
-  const [config,      setConfig]      = useState<TradingConfig>(DEFAULT_CONFIG);
+  const { isLoggedIn } = useAuth();
+
+  const [activeTab,    setActiveTab]    = useState("circles");
+  const [globalSym,    setGlobalSym]    = useState("R_10");
+  const [tickWindow,   setTickWindow]   = useState(1000);
+  const [showConfig,   setShowConfig]   = useState(false);
+  const [config,       setConfig]       = useState<TradingConfig>(DEFAULT_CONFIG);
+  const [showAuthGate, setShowAuthGate] = useState(false);
+  const [runStatus,    setRunStatus]    = useState<string | null>(null);
+  const [isRunning,    setIsRunning]    = useState(false);
 
   const handleConfigChange = (k: keyof TradingConfig, v: string | number) =>
     setConfig(prev => ({ ...prev, [k]: v }));
+
+  const handleRun = () => {
+    if (!isLoggedIn) {
+      setShowAuthGate(true);
+      return;
+    }
+    const token = localStorage.getItem("deriv_token");
+    if (!token) {
+      setShowAuthGate(true);
+      return;
+    }
+    setIsRunning(true);
+    setRunStatus("Connecting...");
+
+    const ws = new WebSocket(WS_URL);
+
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ authorize: token }));
+    };
+
+    ws.onmessage = (evt) => {
+      try {
+        const msg = JSON.parse(evt.data as string);
+        if (msg.error) {
+          setRunStatus(`! ${msg.error.message}`);
+          setIsRunning(false);
+          ws.close();
+          return;
+        }
+        if (msg.msg_type === "authorize") {
+          setRunStatus("Getting price...");
+          const params: Record<string, unknown> = {
+            proposal:       1,
+            amount:         config.stake,
+            basis:          "stake",
+            contract_type:  config.contract,
+            currency:       config.currency,
+            symbol:         config.volatility,
+            duration:       config.duration,
+            duration_unit:  "t",
+          };
+          if (["DIGITMATCH","DIGITDIFF","DIGITOVER","DIGITUNDER"].includes(config.contract)) {
+            params.barrier = String(config.prediction);
+          }
+          ws.send(JSON.stringify(params));
+        }
+        if (msg.msg_type === "proposal") {
+          setRunStatus("Placing trade...");
+          ws.send(JSON.stringify({ buy: msg.proposal.id, price: config.stake }));
+        }
+        if (msg.msg_type === "buy") {
+          setRunStatus(`✓ Trade placed — Contract #${msg.buy.contract_id}`);
+          setIsRunning(false);
+          ws.close();
+          setTimeout(() => {
+            setRunStatus(null);
+            setShowConfig(false);
+          }, 4000);
+        }
+      } catch (_) {
+        setRunStatus("! Unexpected error");
+        setIsRunning(false);
+        ws.close();
+      }
+    };
+
+    ws.onerror = () => {
+      setRunStatus("Error: connection failed");
+      setIsRunning(false);
+    };
+  };
 
   const globalWS = useDerivWS(globalSym, tickWindow);
   const usesGlobal = ["circles","signals","smart"].includes(activeTab);
@@ -1467,12 +1567,19 @@ export default function AnalysisTool() {
   return (
     <div className="flex flex-col bg-[#F4F6FA]" style={{ minHeight:"calc(100dvh - 132px)" }}>
 
+      <AuthGateModal
+        open={showAuthGate}
+        onClose={() => setShowAuthGate(false)}
+      />
+
       <TradingConfigModal
         open={showConfig}
-        onClose={() => setShowConfig(false)}
+        onClose={() => { setShowConfig(false); setRunStatus(null); setIsRunning(false); }}
         config={config}
         onChange={handleConfigChange}
-        onRun={() => setShowConfig(false)}
+        onRun={handleRun}
+        runStatus={runStatus}
+        isRunning={isRunning}
       />
 
       {/* Top controls bar */}
