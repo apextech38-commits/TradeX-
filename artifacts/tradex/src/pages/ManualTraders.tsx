@@ -131,7 +131,7 @@ export default function ManualTraders() {
         }}
         allow="clipboard-read; clipboard-write; microphone; camera"
         title="DTrader — Deriv Trading Platform"
-        sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"
+        sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"
       />
 
       <style>{`
