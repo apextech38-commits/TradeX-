@@ -52,10 +52,10 @@ function AppContent() {
   const renderContent = () => {
     switch (activeTab) {
       case "Dashboard":      return <Dashboard />;
-      case "Bot Builder":    return <TradingBots />;
+      case "Bot Builder":    return <BotBuilder />;
       case "Manual Traders": return <ManualTraders />;
       case "Charts":         return <Charts />;
-      case "Trading Bots":   return <BotBuilder />;
+      case "Trading Bots":   return <TradingBots />;
       case "Analysis Tool":  return <AnalysisTool />;
       case "Strategies":     return <Strategies />;
       case "Copy Trading":   return <CopyTrading />;
@@ -68,7 +68,9 @@ function AppContent() {
     <div className="min-h-screen w-full bg-background text-foreground font-sans flex flex-col pt-[80px] pb-[52px]">
       <Navbar activeTab={activeTab} setActiveTab={setActiveTab} />
       <main className="flex-1 flex flex-col w-full h-full overflow-y-auto">
-        {renderContent()}
+        <div key={activeTab} className="tradex-page-enter flex-1 flex flex-col w-full h-full">
+          {renderContent()}
+        </div>
       </main>
       <BottomBar />
       <AIScanner />
