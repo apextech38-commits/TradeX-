@@ -462,7 +462,7 @@ export default function ManualTraders() {
         </button>
 
         {/* ── Chart ──────────────────────────────────────────────────── */}
-        <div style={{ height: 220, background: "#0C1B2E" }} className="shrink-0">
+        <div style={{ height: 260, background: "#0f172a" }} className="shrink-0">
           <LightweightChart symbol={sym.id} tradingMode />
         </div>
 
